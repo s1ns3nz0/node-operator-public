@@ -200,7 +200,8 @@ config_error() { printf 'configuration rejected at %s line %s\n' "$env_file" "$e
 # Optional local non-secret defaults. Repository/identity values are still
 # derived and validated from AWS CLI, gh CLI, and git origin.
 DEFAULT_KEYSTORE_DIR=''; DEFAULT_VALIDATOR_SET='hoodi-example'; DEFAULT_VALIDATOR_KEY=''; DEFAULT_WITHDRAWAL=''; DEFAULT_AUDIT_REPLICA_REGION=''; DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE=COMPLIANCE
-env_file="${NODE_OPERATOR_ENV_FILE:-$source_root/.env}"
+config_root="${NODE_OPERATOR_SOURCE_REPOSITORY_ROOT:-$source_root}"
+env_file="${NODE_OPERATOR_ENV_FILE:-$config_root/.env}"
 [ -f "$env_file" ] && [ ! -L "$env_file" ] || env_file=''
 if [ -n "$env_file" ]; then
   env_file="$(cd "$(dirname "$env_file")" && pwd -P)/$(basename "$env_file")"
