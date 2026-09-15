@@ -518,6 +518,10 @@ zero_apply() {
   if [ "$bootstrap_state_migration_required" -eq 1 ]; then
     # Restore the backend block only after its bucket and lock table exist.
     [ -f "$bootstrap_module/versions.tf.disabled" ] && mv "$bootstrap_module/versions.tf.disabled" "$bootstrap_module/versions.tf"
+    # A failed prior attempt can have created a stale local provider lock while
+    # versions.tf was disabled. Restore the release-pinned lock before remote
+    # backend initialization rather than reusing that local cache decision.
+    cp "$bundle_root/source/infra/bootstrap-state/.terraform.lock.hcl" "$bootstrap_module/.terraform.lock.hcl"
     # The remote backend was just created by this exact local state and was
     # ownership-validated above. Terraform otherwise asks an unusable stdin
     # confirmation even though this guarded installer runs non-interactively.
