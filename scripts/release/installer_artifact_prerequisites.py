@@ -324,6 +324,12 @@ def _validate_publisher(address: str, after: dict[str, Any], detail: dict[str, A
     role_address = "aws_iam_role.github_validator_client_mirror[0]" if "signer_identity_probe" in address else address.replace("aws_iam_role_policy", "aws_iam_role")
     if role is None and isinstance(detail.get("after_unknown"), dict) and detail["after_unknown"].get("role") is True and _exact_reference(source, role_address + ".id"):
         role = expected_role
+    policy_data_address = address.replace("aws_iam_role_policy", "data.aws_iam_policy_document") + ".json"
+    if role == expected_role and policy is None and isinstance(detail.get("after_unknown"), dict) and detail["after_unknown"].get("policy") is True and _exact_reference(source, policy_data_address):
+        # Terraform cannot render a policy data value whose dependent ECR/KMS
+        # resources are new. Its exact configured data source is validated via
+        # the managed policy after apply.
+        return
     if role != expected_role or not isinstance(policy, str):
         raise PrerequisiteError(f"publisher inline policy is invalid: {address} expected_role={expected_role!r} actual_role={role!r}")
     _validate_publisher_policy(policy, address, account, region, name)
