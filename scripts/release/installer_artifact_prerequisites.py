@@ -555,7 +555,9 @@ def projection(state: dict[str, Any], account: str, region: str, name: str, fing
         if not isinstance(parsed_policy, dict):
             raise PrerequisiteError("state lifecycle policy is invalid")
     if include_publishers:
-        for address in sorted(PUBLISHER_RESOURCES):
+        # Optional publisher closures are absent from state when their feature
+        # is disabled. Validate every publisher that Terraform actually made.
+        for address in sorted(address for address in PUBLISHER_RESOURCES if address in resources):
             kind = "aws_iam_role" if address.startswith("aws_iam_role.") else "aws_iam_role_policy"
             item = _one(resources, address, kind)
             _validate_publisher(address, item, {"after_unknown": {}}, {}, account, region, name, github_identity, gitops_identity)
