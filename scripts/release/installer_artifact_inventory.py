@@ -162,6 +162,11 @@ def build_inventory(bundle_root: Path, release_sha: str, account: str, region: s
     entries: list[dict[str, Any]] = []
     gitops_components = (
         ("argo-cd-chart", "ghcr.io/argoproj/argo-helm/argo-cd@", "argocd", "Argo CD Helm bootstrap"),
+        # The reviewed GitOps catalog is the release-bound authority for the
+        # bootstrap runner too. It is shipped in every public bundle and is
+        # immutable by digest, unlike the removed operator-local historic
+        # platform approval file.
+        ("argocd-bootstrap", "ghcr.io/s1ns3nz0/node-operator/argocd-bootstrap@", "argocd", "private Argo bootstrap runner"),
         ("argo-cd", "quay.io/argoproj/argocd@", "argocd", "Argo CD runtime"),
         ("dex", "ghcr.io/dexidp/dex@", "argocd", "Argo CD runtime"),
         ("redis", "public.ecr.aws/docker/library/redis@", "argocd", "Argo CD runtime"),
@@ -197,18 +202,6 @@ def build_inventory(bundle_root: Path, release_sha: str, account: str, region: s
                                   item["source"], "approved-gitops-catalog", True,
                                   destination_tag=item["tag"]))
 
-    platform = _exact(_json(source_root / "release/platform-artifact-approval.json"), {"schema_version", "release", "artifacts"}, "platform artifact approval")
-    if platform["schema_version"] != 1 or not isinstance(platform["release"], str) or not isinstance(platform["artifacts"], dict):
-        raise InventoryError("platform artifact approval is invalid")
-    argo = _exact(platform["artifacts"].get("argocd_bootstrap"), {"source", "destination_repository", "purpose"}, "Argo bootstrap approval")
-    argo_source = _text(argo["source"], "Argo bootstrap source", IMAGE)
-    argo_destination = _text(argo["destination_repository"], "Argo bootstrap destination repository")
-    if argo_destination != "node-operator-baseline-gitops-argocd":
-        raise InventoryError("Argo bootstrap approval destination is not the reviewed baseline suffix")
-    _text(argo["purpose"], "Argo bootstrap purpose")
-    entries.append(_entry("argocd-bootstrap", "private Argo bootstrap runner",
-                          _destination(account, region, f"{deployment_name}-baseline-gitops-argocd", argo_source.rsplit("@", 1)[1]),
-                          argo_source, "platform-artifact-approval", True))
 
     runtime = _exact(_json(source_root / ".ci/validator/approved-runtime-images.json"), {"schema_version", "images"}, "validator runtime catalog")
     if runtime["schema_version"] != 1 or not isinstance(runtime["images"], dict):

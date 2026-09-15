@@ -66,7 +66,7 @@ class ArtifactInventoryTests(unittest.TestCase):
         (self.source / ".ci/validator").mkdir(parents=True)
         (self.source / "release").mkdir()
         (self.bundle / "rendered").mkdir()
-        for source in (".ci/gitops/approved-oci-artifacts.json", ".ci/validator/approved-runtime-images.json", ".ci/validator/approved-client-images.json", "release/platform-artifact-approval.json"):
+        for source in (".ci/gitops/approved-oci-artifacts.json", ".ci/validator/approved-runtime-images.json", ".ci/validator/approved-client-images.json"):
             shutil.copyfile(ROOT / source, self.source / source)
         (self.bundle / "rendered/installer-artifact-index.json").write_text(json.dumps(vault_index()))
 
@@ -112,6 +112,8 @@ class ArtifactInventoryTests(unittest.TestCase):
         self.assertEqual(items["vault-bootstrap"]["source"], f"example.invalid/vault-bootstrap@{DIGEST}")
         self.assertEqual(items["argocd-bootstrap"]["destination"],
                          f"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-argocd@{items['argocd-bootstrap']['source'].split('@', 1)[1]}")
+        self.assertEqual(items["argocd-bootstrap"]["authority"], "approved-gitops-catalog")
+        self.assertTrue(items["argocd-bootstrap"]["source"].startswith("ghcr.io/s1ns3nz0/node-operator/argocd-bootstrap@sha256:"))
         self.assertIsNone(items["prysm-validator"]["source"])
         collector = items["validator-log-collector"]
         self.assertEqual(collector["source"], "cr.fluentbit.io/fluent/fluent-bit@sha256:a5761fa961cb22dd0875883a4d446b1acd99d4935d77358aa9f50ee177e44fe2")
@@ -226,10 +228,11 @@ class ArtifactInventoryTests(unittest.TestCase):
         index_path.write_text(json.dumps(index))
         self.assertEqual(self.invoke().returncode, 2)
         index_path.write_text(json.dumps(vault_index()))
-        approval_path = self.source / "release/platform-artifact-approval.json"
-        approval = json.loads(approval_path.read_text())
-        approval["artifacts"]["argocd_bootstrap"]["destination_repository"] = "unexpected-repository"
-        approval_path.write_text(json.dumps(approval))
+        catalog_path = self.source / ".ci/gitops/approved-oci-artifacts.json"
+        catalog = json.loads(catalog_path.read_text())
+        catalog["artifacts"] = [item for item in catalog["artifacts"]
+                                if not item["source"].startswith("ghcr.io/s1ns3nz0/node-operator/argocd-bootstrap@")]
+        catalog_path.write_text(json.dumps(catalog))
         self.assertEqual(self.invoke().returncode, 2)
 
     def test_actual_repository_is_incomplete_until_release_records_exist(self):
