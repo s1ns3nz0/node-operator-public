@@ -21,9 +21,8 @@ case "$bundle:$work" in /*:/*) ;; *) printf '%s\n' 'bundle root and work directo
 [ -d "$bundle/source" ] && [ ! -L "$bundle/source" ] && [ -f "$bundle/bundle-manifest.json" ] && [ ! -L "$bundle/bundle-manifest.json" ] || { printf '%s\n' 'bundle root is not a safe release layout' >&2; exit 65; }
 [ -d "$work" ] && [ ! -L "$work" ] && [ -f "$work/artifact-prerequisites.json" ] && [ ! -L "$work/artifact-prerequisites.json" ] || { printf '%s\n' 'local artifact bootstrap requires completed zero prepare-artifacts' >&2; exit 65; }
 [[ "$account" =~ ^[0-9]{12}$ && "$region" =~ ^[a-z]{2}-[a-z0-9-]+-[0-9]+$ && "$deployment" =~ ^[a-z][a-z0-9-]{1,18}[a-z0-9]$ && "$revision" =~ ^[0-9a-f]{40}$ ]] || { printf '%s\n' 'local artifact bootstrap context is invalid' >&2; exit 64; }
-publisher="${NODE_OPERATOR_LOCAL_ARTIFACT_PUBLISHER:-}"
-[ -n "$publisher" ] || { printf '%s\n' 'set NODE_OPERATOR_LOCAL_ARTIFACT_PUBLISHER to the reviewed local build/sign/publish command' >&2; exit 69; }
-[ -x "$publisher" ] && [ ! -L "$publisher" ] || { printf '%s\n' 'local artifact publisher must be an executable regular file' >&2; exit 65; }
+publisher="$bundle/source/scripts/release/local-installer-artifact-publisher.sh"
+[ -x "$publisher" ] && [ ! -L "$publisher" ] || { printf '%s\n' 'release bundle lacks the local artifact publisher' >&2; exit 65; }
 authority="$work/local-artifact-authority.json"
 [ ! -e "$authority" ] && [ ! -L "$authority" ] || { printf '%s\n' 'refusing to overwrite local artifact authority' >&2; exit 65; }
 "$publisher" --bundle-root "$bundle" --work-dir "$work" --account "$account" --region "$region" --deployment-name "$deployment" --release-sha "$revision" --output "$authority"
