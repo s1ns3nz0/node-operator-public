@@ -71,7 +71,7 @@ jobs:
           client-id: ${{ vars.GITOPS_EVIDENCE_APP_CLIENT_ID }}
           private-key: ${{ secrets.GITOPS_EVIDENCE_APP_PRIVATE_KEY }}
           owner: s1ns3nz0
-          repositories: node-operator-gitops
+          repositories: node-operator-public-gitops
           permission-actions: read
           skip-token-revoke: false
       # Role: Obtain one independently validated, exact-revision image-publication record set before building release evidence.

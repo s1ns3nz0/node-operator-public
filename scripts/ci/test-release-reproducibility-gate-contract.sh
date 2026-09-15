@@ -17,7 +17,7 @@ grep -Fq 'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3e
 grep -Fq 'client-id: ${{ vars.GITOPS_EVIDENCE_APP_CLIENT_ID }}' <<<"$reproducibility"
 grep -Fq 'private-key: ${{ secrets.GITOPS_EVIDENCE_APP_PRIVATE_KEY }}' <<<"$reproducibility"
 grep -Fq 'owner: s1ns3nz0' <<<"$reproducibility"
-grep -Fq 'repositories: node-operator-gitops' <<<"$reproducibility"
+grep -Fq 'repositories: node-operator-public-gitops' <<<"$reproducibility"
 grep -Fq 'permission-actions: read' <<<"$reproducibility"
 grep -Fq 'skip-token-revoke: false' <<<"$reproducibility"
 grep -Fq 'GITOPS_EVIDENCE_TOKEN: ${{ steps.gitops-reader.outputs.token }}' <<<"$reproducibility"
