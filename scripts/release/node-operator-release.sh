@@ -422,6 +422,9 @@ zero_apply() {
       [ -d "$bootstrap_module" ] && [ ! -L "$bootstrap_module" ] || fail "incomplete bootstrap checkpoint has an unsafe module path"
     else
       copy_module infra/bootstrap-state "$bootstrap_module"
+      # The bootstrap module creates the S3 backend itself. Terraform cannot
+      # plan its first local apply while the backend block is active.
+      mv "$bootstrap_module/versions.tf" "$bootstrap_module/versions.tf.disabled"
     fi
     # state_bucket_name is intentionally null for the generated deterministic
     # name. Do not use jq -e here: an empty optional result is not an error.
@@ -513,6 +516,8 @@ zero_apply() {
   ' "$bootstrap_output" >/dev/null || fail "live bootstrap output does not bind the configured backend identity"
   write_backend_config "$bootstrap_output" "node-operator/bootstrap-state/terraform.tfstate" "$bootstrap_backend"
   if [ "$bootstrap_state_migration_required" -eq 1 ]; then
+    # Restore the backend block only after its bucket and lock table exist.
+    [ -f "$bootstrap_module/versions.tf.disabled" ] && mv "$bootstrap_module/versions.tf.disabled" "$bootstrap_module/versions.tf"
     # Bootstrap begins in local state because the remote backend is being made.
     # Migration is explicit and never uses force-copy.
     terraform -chdir="$bootstrap_module" init -input=false -migrate-state -backend-config="$bootstrap_backend"
