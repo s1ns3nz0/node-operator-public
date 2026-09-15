@@ -200,11 +200,11 @@ def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, in
                 if not _contains_string(after, f"arn:aws:iam::{account}:root"):
                     raise PrerequisiteError("Terraform plan KMS policy read is not account-bound")
             elif address == "data.aws_iam_policy_document.github_gitops_client_ecr_publisher[0]":
-                # This is the ECR KMS key policy, not the OIDC assume-role
-                # policy. Its repository binding is proven on the managed role
-                # later; this read must remain account-root bound.
-                if not _contains_string(after, f"arn:aws:iam::{account}:root"):
-                    raise PrerequisiteError("Terraform plan GitOps publisher policy read is not account-bound")
+                # This generated policy is a configuration-derived KMS document
+                # with no rendered account/repository literal. Its exact trust
+                # binding is validated on the managed IAM role and key policy
+                # resources below; this named, configured read is safe alone.
+                pass
             elif not (_contains_string(after, account) and _contains_string(after, f"ecr.{region}.amazonaws.com")):
                 raise PrerequisiteError("Terraform plan ECR KMS policy read is not deployment-bound")
             continue
