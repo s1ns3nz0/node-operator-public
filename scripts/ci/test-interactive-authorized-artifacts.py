@@ -28,6 +28,7 @@ def fixture(work):
     shutil.copy2(ROOT / "deploy/prysm/service.yaml", source / "deploy/prysm/service.yaml")
     (bundle / "bundle-manifest.json").write_text('{"source_revision":"' + "a" * 40 + '"}\n')
     shutil.copy(ROOT / "scripts/release/interactive-hoodi-release.sh", release / "interactive-hoodi-release.sh"); (release / "interactive-hoodi-release.sh").chmod(0o755)
+    shutil.copy(ROOT / "scripts/release/interactive-hoodi-defaults.sh", release / "interactive-hoodi-defaults.sh"); (release / "interactive-hoodi-defaults.sh").chmod(0o755)
     # Exercise the public no-argument installer, not the wrapper directly.
     # From an extracted bundle it must hand off to interactive-hoodi-release.sh.
     shutil.copy(ROOT / "scripts/release/node-operator-install.sh", release / "node-operator-install.sh"); (release / "node-operator-install.sh").chmod(0o755)
@@ -83,8 +84,10 @@ raise SystemExit(65 if sys.argv[1:2] == ['bind-continuation'] and os.environ.get
     chart_digest = "sha256:" + "8" * 64
     cert_digest = "sha256:" + "9" * 64
     (bundle / "rendered/installer-artifact-index.json").write_text(json.dumps({"components": {"vault-chart": {"version": "0.31.0", "expected_oci_manifest_digest": chart_digest}, "cert-manager-chart": {"expected_oci_manifest_digest": cert_digest}}}) + "\n")
-    aws = "#!/usr/bin/env bash\nprintf 'aws %s\\n' \"$*\" >> \"$AWS_LOG\"\ncase \"$1:$2\" in\nsts:get-caller-identity) printf '{\"Account\":\"123456789012\",\"Arn\":\"arn:aws:iam::123456789012:user/test\"}\\n' ;;\niam:get-role) printf '(NoSuchEntity)' >&2; exit 1 ;;\niam:create-role|iam:put-role-policy) exit 0 ;;\nec2:describe-availability-zones) printf 'ap-northeast-2a\\tap-northeast-2b\\n' ;;\nconfigservice:describe-configuration-recorders) printf '1\\n' ;;\necr:describe-images) repository=''; previous=''; for arg in \"$@\"; do [ \"$previous\" = --repository-name ] && repository=$arg; previous=$arg; done; if [ \"$repository\" = \"${ECR_FAIL_REPOSITORY:-}\" ]; then case \"${ECR_RESULT:?}\" in missing) printf 'None\\n' ;; wrong) printf 'sha256:'; printf '9%.0s' {1..64}; printf '\\n' ;; esac; exit 0; fi; for arg in \"$@\"; do case \"$arg\" in imageDigest=*) printf '%s\\n' \"${arg#imageDigest=}\"; exit 0 ;; imageTag=*) printf 'sha256:'; printf '7%.0s' {1..64}; printf '\\n'; exit 0 ;; esac; done ;;\n*) exit 88 ;;\nesac\n"
+    aws = "#!/usr/bin/env bash\nprintf 'aws %s\\n' \"$*\" >> \"$AWS_LOG\"\ncase \"$1:$2\" in\nconfigure:get) printf 'ap-northeast-2\\n' ;;\nsts:get-caller-identity) printf '{\"Account\":\"123456789012\",\"Arn\":\"arn:aws:iam::123456789012:user/test\"}\\n' ;;\niam:get-role) printf '(NoSuchEntity)' >&2; exit 1 ;;\niam:create-role|iam:put-role-policy) exit 0 ;;\nec2:describe-availability-zones) printf 'ap-northeast-2a\\tap-northeast-2b\\n' ;;\nconfigservice:describe-configuration-recorders) printf '1\\n' ;;\necr:describe-images) repository=''; previous=''; for arg in \"$@\"; do [ \"$previous\" = --repository-name ] && repository=$arg; previous=$arg; done; if [ \"$repository\" = \"${ECR_FAIL_REPOSITORY:-}\" ]; then case \"${ECR_RESULT:?}\" in missing) printf 'None\\n' ;; wrong) printf 'sha256:'; printf '9%.0s' {1..64}; printf '\\n' ;; esac; exit 0; fi; for arg in \"$@\"; do case \"$arg\" in imageDigest=*) printf '%s\\n' \"${arg#imageDigest=}\"; exit 0 ;; imageTag=*) printf 'sha256:'; printf '7%.0s' {1..64}; printf '\\n'; exit 0 ;; esac; done ;;\n*) exit 88 ;;\nesac\n"
     exe(fake / "aws", aws)
+    exe(fake / "gh", "#!/usr/bin/env bash\n[ \"$1\" = api ] && [ \"$2\" = repos/example/node-operator ] && [ \"$3\" = --jq ] || exit 64\nprintf 'example/node-operator\\t101\\t102\\n'\n")
+    exe(fake / "git", "#!/usr/bin/env bash\n[ \"$1:$2:$3\" = config:--get:remote.origin.url ] || exit 64\nprintf 'https://github.com/example/node-operator.git\\n'\n")
     exe(fake / "docker", "#!/usr/bin/env bash\nprintf 'docker %s\\n' \"$*\" >> \"$DOCKER_LOG\"\nexit 94\n")
     # The wrapper preflights these release dependencies. Chart rendering is
     # intentionally outside this PTY fixture; fail if either command is used.
@@ -104,7 +107,7 @@ def run(script, fake, work, answers, **extra):
     env["DEFAULT_WITHDRAWAL"] = "0x" + "1" * 40
     env.update({"DEFAULT_GITHUB_REPOSITORY": "example/operator", "DEFAULT_GITHUB_OWNER_ID": "101", "DEFAULT_GITHUB_REPOSITORY_ID": "102", "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY": "example/gitops", "DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID": "103", "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID": "104"})
     env.update(extra)  # Explicit fixture inputs take precedence over ambient cleanup.
-    proc = subprocess.Popen([str(script)], stdin=slave, stdout=slave, stderr=slave, env=env); os.close(slave); os.write(master, answers.encode()); out = bytearray(); deadline = time.monotonic() + 15
+    proc = subprocess.Popen([str(script)], stdin=slave, stdout=slave, stderr=slave, env=env, cwd=work); os.close(slave); os.write(master, answers.encode()); out = bytearray(); deadline = time.monotonic() + 15
     try:
         while time.monotonic() < deadline and proc.poll() is None:
             ready, _, _ = select.select([master], [], [], .1)

@@ -199,7 +199,7 @@ run_gate | grep -Fq 'PASS: activation preflight passed; client and signing fence
 test ! -s "$scratch/trace" || fail 'exact direct dry-run reached a scale request'
 
 reset_fixture; client_image="${direct_client_image/node-operator-example/other-deployment}"; fence_image="$direct_fence_image"; write_valid_inventory; expect_rejected 'wrong direct client deployment repository'
-reset_fixture; client_image="${direct_client_image/123456789012/123456789012}"; fence_image="$direct_fence_image"; write_valid_inventory; expect_rejected 'wrong direct client registry account'
+reset_fixture; client_image="${direct_client_image/123456789012/999999999999}"; fence_image="$direct_fence_image"; write_valid_inventory; expect_rejected 'wrong direct client registry account'
 reset_fixture; client_image="${direct_client_image%?}0"; fence_image="$direct_fence_image"; write_valid_inventory; expect_rejected 'wrong direct client digest'
 reset_fixture; client_image="$direct_client_image"; fence_image="${direct_fence_image%?}0"; write_valid_inventory; expect_rejected 'wrong release-bound fence digest'
 
