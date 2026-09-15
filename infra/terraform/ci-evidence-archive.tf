@@ -15,6 +15,17 @@ variable "ci_evidence_archive_retention_days" {
   }
 }
 
+variable "ci_evidence_archive_retention_mode" {
+  description = "Object Lock mode; use GOVERNANCE only for an explicitly temporary verification deployment."
+  type        = string
+  default     = "COMPLIANCE"
+
+  validation {
+    condition     = contains(["COMPLIANCE", "GOVERNANCE"], var.ci_evidence_archive_retention_mode)
+    error_message = "ci_evidence_archive_retention_mode must be COMPLIANCE or GOVERNANCE."
+  }
+}
+
 resource "aws_kms_key" "ci_evidence_archive" {
   count                   = var.enable_ci_evidence_archive ? 1 : 0
   description             = "KMS key for long-term signed CI evidence archive"
@@ -65,7 +76,7 @@ resource "aws_s3_bucket_object_lock_configuration" "ci_evidence_archive" {
   bucket = aws_s3_bucket.ci_evidence_archive[0].id
   rule {
     default_retention {
-      mode = "COMPLIANCE"
+      mode = var.ci_evidence_archive_retention_mode
       days = var.ci_evidence_archive_retention_days
     }
   }
