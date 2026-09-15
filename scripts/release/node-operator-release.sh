@@ -445,7 +445,7 @@ zero_apply() {
     else
       bootstrap_state_probe_status=$?
       [ "$bootstrap_state_probe_status" -eq 1 ] || fail "unable to determine whether bootstrap remote state exists"
-      terraform -chdir="$bootstrap_module" init -input=false -backend=false
+      terraform -chdir="$bootstrap_module" init -input=false -reconfigure -backend=false
       bootstrap_state_migration_required=1
     fi
     # A retry after interruption can import only exact, owned resource names.
@@ -501,7 +501,7 @@ zero_apply() {
       bootstrap_has_local_state "$bootstrap_module"
       bootstrap_local_state_status=$?
       [ "$bootstrap_local_state_status" -eq 0 ] || fail "bootstrap cached output has no usable local or remote state"
-      terraform -chdir="$bootstrap_module" init -input=false -backend=false
+      terraform -chdir="$bootstrap_module" init -input=false -reconfigure -backend=false
       bootstrap_state_migration_required=1
     fi
     terraform -chdir="$bootstrap_module" output -json backend > "$work_dir/bootstrap-live-output.json" || fail "unable to read live bootstrap Terraform output"
