@@ -519,9 +519,9 @@ zero_apply() {
     # Restore the backend block only after its bucket and lock table exist.
     [ -f "$bootstrap_module/versions.tf.disabled" ] && mv "$bootstrap_module/versions.tf.disabled" "$bootstrap_module/versions.tf"
     # A failed prior attempt can have created a stale local provider lock while
-    # versions.tf was disabled. Restore the release-pinned lock before remote
-    # backend initialization rather than reusing that local cache decision.
-    cp "$bundle_root/source/infra/bootstrap-state/.terraform.lock.hcl" "$bootstrap_module/.terraform.lock.hcl"
+    # versions.tf was disabled. Remove it; the restored < 6.0.0 constraint is
+    # then resolved during the backend initialization below.
+    rm -f "$bootstrap_module/.terraform.lock.hcl"
     # The remote backend was just created by this exact local state and was
     # ownership-validated above. Terraform otherwise asks an unusable stdin
     # confirmation even though this guarded installer runs non-interactively.
