@@ -28,6 +28,7 @@ PLAN_DATA_READS = {
     "data.aws_iam_policy_document.validator_client_ecr_key[0]",
     "data.aws_iam_policy_document.validator_log_collector_ecr_key[0]",
     "data.aws_iam_policy_document.validator_runtime_ecr_key[0]",
+    "data.aws_iam_policy_document.github_gitops_client_ecr_publisher[0]",
     "data.aws_iam_policy_document.vault_audit_relay_ecr_key[0]",
 }
 PRIVATE_GITOPS = {
