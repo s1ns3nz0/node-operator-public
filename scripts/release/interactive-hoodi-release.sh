@@ -29,6 +29,7 @@ fi
 
 release="$source_root/scripts/release/hoodi-validator-release.sh"
 prepare="$source_root/scripts/release/prepare-hoodi-zero-release-inputs.sh"
+prepare_zero="$source_root/scripts/release/prepare-zero-resource-inputs.sh"
 keystore="$source_root/scripts/ops/generate-hoodi-validator-keystore.sh"
 deposit_validate="$source_root/scripts/ops/validate-hoodi-deposit-data.sh"
 vault_tls="$source_root/scripts/release/prepare-vault-bootstrap-tls.sh"
@@ -562,8 +563,6 @@ withdrawal_confirmation="$(prompt 'Re-enter the withdrawal address to confirm cu
 [ "$withdrawal" = "$withdrawal_confirmation" ] && [[ "$withdrawal" =~ ^0x[0-9a-fA-F]{40}$ ]] || { printf '%s\n' 'withdrawal address confirmation did not match a valid address' >&2; exit 64; }
 audit_replica_region=ap-northeast-1; [ "$region" = ap-northeast-1 ] && audit_replica_region=ap-northeast-2
 printf 'Deployment context: account=%s primary=%s audit-replica=%s name=%s repository=%s\n' "$account" "$region" "$audit_replica_region" "$deployment_name" "$DEFAULT_GITHUB_REPOSITORY" >&2
-load_authorized_artifacts || exit $?
-printf 'Using canonical release-authorized artifacts:\n  Web3Signer %s\n  PostgreSQL %s\n  Prysm %s\n  Fence %s\n' "$(display_digest "$web3signer_image")" "$(display_digest "$postgres_image")" "$(display_digest "$prysm_image")" "$(display_digest "$fence_image")" >&2
 # A shared default role would tie independent deployments to the lifecycle of
 # whichever deployment first created it. Explicit external role ARNs remain
 # supported, but are never retagged or claimed by this installer.
@@ -757,6 +756,24 @@ manage_config_recorder="$(discover_config_recorder_management)" || exit $?
 if [ "$manage_config_recorder" = false ]; then
   printf '%s\n' 'Reusing the existing regional AWS Config recorder; no duplicate recorder will be created.' >&2
 fi
+# A new account has no deployment-scoped ECR repositories before the narrowly
+# scoped prerequisite pass.  Build the zero-resource half of the handoff first,
+# establish those prerequisites, and only then load the complete artifact
+# authority used to render validator inputs.  Do not move this gate above the
+# prepare-artifacts call: that resurrects the fresh-install deadlock.
+artifact_prerequisite_dir="$output_dir/artifact-prerequisites"
+[ -x "$prepare_zero" ] || { printf 'missing executable in release bundle: %s\n' "$prepare_zero" >&2; exit 65; }
+"$prepare_zero" --aws-account-id "$account" --aws-region "$region" --name "$deployment_name" \
+  --availability-zone "${zones[0]}" --availability-zone "${zones[1]}" \
+  --audit-replica-region "$audit_replica_region" \
+  --github-repository "$DEFAULT_GITHUB_REPOSITORY" --github-owner-id "$DEFAULT_GITHUB_OWNER_ID" --github-repository-id "$DEFAULT_GITHUB_REPOSITORY_ID" \
+  --gitops-client-github-repository "$DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY" --gitops-client-github-owner-id "$DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID" --gitops-client-github-repository-id "$DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID" \
+  --manage-config-recorder "$manage_config_recorder" --ci-evidence-archive-retention-mode "$DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE" \
+  --backend-principal-arn "$DEFAULT_BACKEND_PRINCIPAL_ARN" --output-dir "$artifact_prerequisite_dir"
+"$source_root/scripts/release/node-operator-release.sh" zero prepare-artifacts --bundle-root "$bundle_root" \
+  --inputs "$artifact_prerequisite_dir/zero-resource-inputs.json" --work-dir "$output_dir/deployment-work" --include-publishers
+load_authorized_artifacts || exit $?
+printf 'Using canonical release-authorized artifacts:\n  Web3Signer %s\n  PostgreSQL %s\n  Prysm %s\n  Fence %s\n' "$(display_digest "$web3signer_image")" "$(display_digest "$postgres_image")" "$(display_digest "$prysm_image")" "$(display_digest "$fence_image")" >&2
 prepare_args=(--aws-account-id "$account" --aws-region "$region" --name "$deployment_name" --availability-zone "${zones[0]}" --availability-zone "${zones[1]}" --validator-set "$validator_set" --validator-public-key "$validator_key" --withdrawal-address "$withdrawal" --web3signer-image "$web3signer_image" --postgres-image "$postgres_image" --prysm-validator-image "$prysm_image" --signing-fence-image "$fence_image" --kubernetes-api-cidr "$api_cidr" --output-dir "$output_dir/inputs")
 prepare_args+=(--audit-replica-region "$audit_replica_region")
 for pair in "--github-repository:$DEFAULT_GITHUB_REPOSITORY" "--github-owner-id:$DEFAULT_GITHUB_OWNER_ID" "--github-repository-id:$DEFAULT_GITHUB_REPOSITORY_ID" "--gitops-client-github-repository:$DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY" "--gitops-client-github-owner-id:$DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID" "--gitops-client-github-repository-id:$DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID"; do key="${pair%%:*}"; value="${pair#*:}"; [ -z "$value" ] || prepare_args+=("$key" "$value"); done

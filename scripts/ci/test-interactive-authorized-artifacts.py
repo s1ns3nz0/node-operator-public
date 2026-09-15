@@ -28,9 +28,13 @@ def fixture(work):
     shutil.copy2(ROOT / "deploy/prysm/service.yaml", source / "deploy/prysm/service.yaml")
     (bundle / "bundle-manifest.json").write_text('{"source_revision":"' + "a" * 40 + '"}\n')
     shutil.copy(ROOT / "scripts/release/interactive-hoodi-release.sh", release / "interactive-hoodi-release.sh"); (release / "interactive-hoodi-release.sh").chmod(0o755)
+    # Exercise the public no-argument installer, not the wrapper directly.
+    # From an extracted bundle it must hand off to interactive-hoodi-release.sh.
+    shutil.copy(ROOT / "scripts/release/node-operator-install.sh", release / "node-operator-install.sh"); (release / "node-operator-install.sh").chmod(0o755)
     shutil.copy(ROOT / "scripts/release/apply-hoodi-validator-runtime.sh", release / "apply-hoodi-validator-runtime.sh"); (release / "apply-hoodi-validator-runtime.sh").chmod(0o755)
-    exe(release / "node-operator-release.sh", "#!/usr/bin/env bash\n[ \"$1\" = verify ] && exit 0\nexit 99\n")
+    exe(release / "node-operator-release.sh", "#!/usr/bin/env bash\n[ \"$1\" = verify ] && exit 0\nif [ \"$1:$2\" = zero:prepare-artifacts ]; then printf 'fresh prepare-artifacts %s\\n' \"$*\" >> \"$RELEASE_LOG\"; exit 0; fi\nexit 99\n")
     exe(release / "installer_artifact_inventory.py", "#!/usr/bin/env python3\nprint(" + repr(authority()) + ")\n")
+    exe(release / "prepare-zero-resource-inputs.sh", "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$PREREQUISITE_LOG\"\nout=''; while [ \"$#\" -gt 0 ]; do [ \"$1\" = --output-dir ] && out=$2; shift; done\nmkdir -p \"$out\"; printf '{}' > \"$out/zero-resource-inputs.json\"\n")
     prepare = "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > \"$PREPARE_LOG\"\nout=''; while [ \"$#\" -gt 0 ]; do [ \"$1\" = --output-dir ] && out=$2; shift; done\nif [ \"${PREPARE_EXIT:-97}\" = 0 ]; then mkdir -p \"$out/zero-resource\" \"$out/validator-deployment\"; printf '{\"name\":\"node-op-auth\"}\\n' > \"$out/zero-resource/baseline.tfvars.json\"; printf '{\"baseline_config\":\"%s/zero-resource/baseline.tfvars.json\"}\\n' \"$out\" > \"$out/zero-resource/zero-resource-inputs.json\"; printf '{\"zero_resource_inputs\":\"%s/zero-resource/zero-resource-inputs.json\"}\\n' \"$out\" > \"$out/hoodi-zero-release-inputs.json\"; : > \"$out/validator-deployment/runtime.yaml\"; : > \"$out/validator-deployment/client-and-fence.yaml\"; exit 0; fi\nexit \"${PREPARE_EXIT:-97}\"\n"
     exe(release / "prepare-hoodi-zero-release-inputs.sh", prepare)
     deploy = "#!/usr/bin/env bash\nprintf '%s %s\\n' \"$1\" \"${2:-}\" >> \"$RELEASE_LOG\"\n[ \"$1\" = deploy ] || exit 0\nwork=''; session=''; while [ \"$#\" -gt 0 ]; do [ \"$1\" = --work-dir ] && work=$2; [ \"$1\" = --private-eks-session-handoff ] && session=$2; shift; done\nmkdir -p \"$work\"; [ -z \"$session\" ] || printf '{}' > \"$session\"; printf '{\"hoodi_subnet_ids\":[\"subnet-a\"]}\\n' > \"$work/foundation-output.json\"; printf '{\"ebs_kms_key_arn\":{\"value\":\"arn:aws:kms:ap-northeast-2:123456789012:key/12345678-1234-1234-1234-123456789abc\"}}\\n' > \"$work/baseline-output.json\"; printf '{\"bucket\":\"bucket\",\"dynamodb_table\":\"table\",\"kms_key_id\":\"key\"}\\n' > \"$work/bootstrap-output.json\"; printf '{\"artifacts\":{\"vault-chart\":{\"version\":\"0.31.0\",\"manifest_digest\":\"sha256:8888888888888888888888888888888888888888888888888888888888888888\"},\"cert-manager-chart\":{\"manifest_digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\"}}}\\n' > \"$work/vault-artifact-mirror-receipt.json\"\n"
@@ -87,10 +91,10 @@ raise SystemExit(65 if sys.argv[1:2] == ['bind-continuation'] and os.environ.get
     exe(fake / "helm", "#!/usr/bin/env bash\nexit 99\n")
     exe(fake / "ruby", "#!/usr/bin/env bash\nexit 99\n")
     exe(fake / "kubectl", "#!/usr/bin/env bash\nprintf 'kubectl:%s\\n' \"${KUBECONFIG:-}\" >> \"$EKS_LOG\"\nexit 76\n")
-    return bundle, fake, release / "interactive-hoodi-release.sh"
+    return bundle, fake, release / "node-operator-install.sh"
 
 def run(script, fake, work, answers, **extra):
-    master, slave = pty.openpty(); env = {**os.environ, "PATH": str(fake) + os.pathsep + os.environ["PATH"], "AWS_LOG": str(work / "aws.log"), "DOCKER_LOG": str(work / "docker.log"), "PREPARE_LOG": str(work / "prepare.log"), "PLATFORM_LOG": str(work / "platform.log"), "RELEASE_LOG": str(work / "release.log"), "SESSION_LOG": str(work / "session.log"), "VAULT_LOG": str(work / "vault.log"), "VAULT_HELPER_LOG": str(work / "vault-helper.log"), "EKS_LOG": str(work / "eks.log"), "COLLECTOR_LOG": str(work / "collector.log"), "VALUES_LOG": str(work / "values.log"), **extra}
+    master, slave = pty.openpty(); env = {**os.environ, "PATH": str(fake) + os.pathsep + os.environ["PATH"], "AWS_LOG": str(work / "aws.log"), "DOCKER_LOG": str(work / "docker.log"), "PREPARE_LOG": str(work / "prepare.log"), "PREREQUISITE_LOG": str(work / "prerequisite.log"), "PLATFORM_LOG": str(work / "platform.log"), "RELEASE_LOG": str(work / "release.log"), "SESSION_LOG": str(work / "session.log"), "VAULT_LOG": str(work / "vault.log"), "VAULT_HELPER_LOG": str(work / "vault-helper.log"), "EKS_LOG": str(work / "eks.log"), "COLLECTOR_LOG": str(work / "collector.log"), "VALUES_LOG": str(work / "values.log"), **extra}
     for key in ("WORK_DIR", "REGION", "DEPLOYMENT_NAME", "VALIDATOR_SET", "VALIDATOR_PUBLIC_KEY", "WITHDRAWAL_ADDRESS", "EXISTING_KEYSTORE_DIR", "WEB3SIGNER_IMAGE", "POSTGRES_IMAGE", "PRYSM_IMAGE", "FENCE_IMAGE", "ARGOCD_BOOTSTRAP_IMAGE", "VAULT_BOOTSTRAP_IMAGE", "CLIENT_CHART_VERSION", "CLIENT_CHART_DIGEST"):
         env.pop(key, None)
     for key in tuple(env):
@@ -127,6 +131,9 @@ def positive():
         (bundle / "env").write_text("WEB3SIGNER_IMAGE=" + source + "\n")
         code, out = run(script, fake, work, f"DEPLOY\n\n\n{DEPLOYMENT}\n\nCONFIRM\nCREATE\n{work / 'run'}\n\nyes\n")
         assert code == 97, (code, out)
+        assert "Enter user-owned withdrawal address" in out, out
+        assert "required installer artifact authority is unresolved" not in out, out
+        assert "fresh prepare-artifacts zero prepare-artifacts" in (work / "release.log").read_text(), (work / "release.log").read_text()
         actual = (work / "prepare.log").read_text()
         for component, repository, digit in ROWS[:4]: assert f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/{DEPLOYMENT}-{repository}@sha256:{digit * 64}" in actual, actual
 
