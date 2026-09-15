@@ -622,6 +622,9 @@ else
 fi
 output_dir="$default_output_dir"
 absolute_new_dir "$output_dir"
+run_root="$(dirname "$output_dir")"
+[ -d "$run_root" ] || mkdir -p -m 700 "$run_root"
+[ -d "$run_root" ] && [ ! -L "$run_root" ] || { printf '%s\n' 'run directory parent is unavailable or unsafe' >&2; exit 65; }
 protected_repository_root="${NODE_OPERATOR_SOURCE_REPOSITORY_ROOT:-}"
 if [ -n "$protected_repository_root" ]; then
   protected_repository_root="$(cd "$protected_repository_root" && pwd -P)"
