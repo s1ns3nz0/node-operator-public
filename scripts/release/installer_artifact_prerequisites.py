@@ -325,7 +325,7 @@ def _validate_publisher(address: str, after: dict[str, Any], detail: dict[str, A
     if role is None and isinstance(detail.get("after_unknown"), dict) and detail["after_unknown"].get("role") is True and _exact_reference(source, role_address + ".id"):
         role = expected_role
     if role != expected_role or not isinstance(policy, str):
-        raise PrerequisiteError("publisher inline policy is invalid")
+        raise PrerequisiteError(f"publisher inline policy is invalid: {address} expected_role={expected_role!r} actual_role={role!r}")
     _validate_publisher_policy(policy, address, account, region, name)
 
 
