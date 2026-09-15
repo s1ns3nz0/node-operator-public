@@ -451,7 +451,13 @@ zero_apply() {
     # A retry after interruption can import only exact, owned resource names.
     # The helper makes AWS reads explicit and rejects uncertain/error states.
     bootstrap_state_json="$work_dir/bootstrap-state-values.json"
-    terraform -chdir="$bootstrap_module" show -json > "$bootstrap_state_json" || fail "unable to read bootstrap Terraform state"
+    if ! terraform -chdir="$bootstrap_module" show -json > "$bootstrap_state_json"; then
+      # A first-run local bootstrap has no state before the initial apply. It
+      # has no resources to reconcile, so represent that explicit empty state
+      # rather than treating Terraform's expected "no state" exit as fatal.
+      [ "$bootstrap_state_migration_required" -eq 1 ] || fail "unable to read bootstrap Terraform state"
+      printf '%s\n' '{"format_version":"1.0","values":{"root_module":null}}' > "$bootstrap_state_json"
+    fi
     chmod 600 "$bootstrap_state_json"
     jq -e 'type == "object" and (.format_version | type == "string")' "$bootstrap_state_json" >/dev/null || fail "bootstrap Terraform state JSON is invalid"
     bootstrap_state_entries="$(jq -r '
