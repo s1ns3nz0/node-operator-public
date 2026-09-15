@@ -34,7 +34,7 @@ jobs:
       # gate or a review-refresh decision. Keep their extraction roots separate;
       # Resolve evidence subject fails closed when neither or both is available.
       - name: Download exact gate evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v5.0.0
         continue-on-error: true
         with:
           pattern: ci-evidence-gate-*
@@ -42,7 +42,7 @@ jobs:
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/ci-evidence/gate
       - name: Download exact review decision
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v5.0.0
         continue-on-error: true
         with:
           pattern: ci-review-decision-${{ github.event.workflow_run.id }}
