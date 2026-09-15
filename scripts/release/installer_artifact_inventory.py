@@ -145,8 +145,29 @@ def _entry(component: str, consumer: str, destination: str | None, source: str |
     return value
 
 
+def _local_artifact_authority(path: Path, release_sha: str, account: str, region: str,
+                              deployment_name: str) -> dict[str, dict[str, Any]]:
+    """Read a fresh local publisher's immutable authority outside the bundle."""
+    value = _exact(_json(path), {"schema_version", "release_revision", "deployment", "artifacts"}, "local artifact authority")
+    expected_deployment = {"aws_account_id": account, "aws_region": region, "deployment_name": deployment_name}
+    if value["schema_version"] != 1 or value["release_revision"] != release_sha or value["deployment"] != expected_deployment or not isinstance(value["artifacts"], list):
+        raise InventoryError("local artifact authority is not bound to this release and deployment")
+    result: dict[str, dict[str, Any]] = {}
+    for item in value["artifacts"]:
+        item = _exact(item, {"component", "source", "destination", "authority"}, "local artifact authority entry")
+        component = _text(item["component"], "local artifact component", re.compile(r"^[a-z0-9][a-z0-9-]*$"))
+        source = _text(item["source"], "local artifact source", IMAGE)
+        destination = _text(item["destination"], "local artifact destination")
+        _, digest = _destination_parts(destination, account, region)
+        if source.rsplit("@", 1)[1] != digest or item["authority"] != "local-build-sign-publish" or component in result:
+            raise InventoryError("local artifact authority entry is invalid")
+        result[component] = {"source": source, "destination": destination, "authority": item["authority"]}
+    return result
+
+
 def build_inventory(bundle_root: Path, release_sha: str, account: str, region: str,
-                    deployment_name: str, require_signer_probe: bool = False) -> dict[str, Any]:
+                    deployment_name: str, require_signer_probe: bool = False,
+                    local_artifact_authority: Path | None = None) -> dict[str, Any]:
     """Return the local authority map without performing any external operation."""
     if not bundle_root.is_absolute() or bundle_root.is_symlink() or not bundle_root.is_dir():
         raise InventoryError("bundle root must be an absolute non-symlink directory")
@@ -336,6 +357,24 @@ def build_inventory(bundle_root: Path, release_sha: str, account: str, region: s
         destination = _destination(account, region, repository, item["digest"]) if repository else None
         entries.append(_entry(component, "Vault installer", destination, item["source"], "installer-artifact-index", True))
 
+    if local_artifact_authority is not None:
+        local = _local_artifact_authority(local_artifact_authority, release_sha, account, region, deployment_name)
+        for item in entries:
+            replacement = local.get(item["component"])
+            if replacement is None:
+                continue
+            # A local publication can resolve only a source that the signed
+            # bundle itself leaves unresolved. It cannot replace existing
+            # signed authority or move an approved destination repository.
+            expected_destination = item.get("destination")
+            same_repository = (isinstance(expected_destination, str) and "@" in expected_destination
+                               and expected_destination.rsplit("@", 1)[0] == replacement["destination"].rsplit("@", 1)[0])
+            if not item.get("unresolved_authority") or not same_repository:
+                raise InventoryError("local artifact authority attempts to replace signed release authority")
+            item.update(replacement)
+            item["status"] = "source-approved"
+            item.pop("unresolved_authority")
+
     entries.sort(key=lambda item: item["component"])
     unresolved = [{"component": item["component"], "reason": item["unresolved_authority"]} for item in entries if item.get("unresolved_authority") and item["required"]]
     return {"schema_version": 1, "release_revision": release_sha, "deployment": {"aws_account_id": account, "aws_region": region, "deployment_name": deployment_name}, "artifacts": entries, "unresolved_authority": unresolved, "complete": not unresolved}
@@ -453,6 +492,8 @@ def main() -> int:
     parser.add_argument("--aws-region", required=True)
     parser.add_argument("--deployment-name", required=True)
     parser.add_argument("--require-signer-probe", action="store_true")
+    parser.add_argument("--local-artifact-authority", type=Path,
+                        help="fresh local build/sign/publish authority outside the signed bundle")
     parser.add_argument("--verify-destinations", action="store_true",
                         help="read-only verify exact ECR destination digest presence")
     parser.add_argument("--profile", help="explicit AWS profile required with --verify-destinations")
@@ -461,12 +502,16 @@ def main() -> int:
         parser.error("--profile is required with --verify-destinations")
     try:
         if args.verify_destinations:
+            if args.local_artifact_authority is not None:
+                parser.error("--local-artifact-authority cannot be used with --verify-destinations")
             result = verify_destinations(args.bundle_root, args.release_sha, args.aws_account_id,
                                          args.aws_region, args.deployment_name, args.profile,
                                          args.require_signer_probe)
             print(json.dumps(result, sort_keys=True, separators=(",", ":")))
             return 0
-        inventory = build_inventory(args.bundle_root, args.release_sha, args.aws_account_id, args.aws_region, args.deployment_name, args.require_signer_probe)
+        inventory = build_inventory(args.bundle_root, args.release_sha, args.aws_account_id, args.aws_region,
+                                    args.deployment_name, args.require_signer_probe,
+                                    args.local_artifact_authority)
     except (InventoryError, DestinationVerificationError) as error:
         parser.error(str(error))
     print(json.dumps(inventory, sort_keys=True, separators=(",", ":")))

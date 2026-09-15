@@ -40,7 +40,8 @@ class ArtifactFirst(unittest.TestCase):
   log=root/"log"
   def fake(name, body):
    p=release/name; p.write_text("#!/bin/sh\n"+body); p.chmod(0o755)
-  fake("node-operator-release.sh",'echo "node:$1:$2:$*:$AWS_PROFILE:${AWS_ACCESS_KEY_ID-unset}:$GITHUB_TOKEN" >> "$LOG"; if [ "$1:$2" = "zero:prepare-artifacts" ]; then case " $* " in *" --include-publishers "*) ;; *) exit 77 ;; esac; mkdir -p "$8"; fi; [ "${FAIL_NODE_PHASE:-}" = "$1:$2" ] && exit 7; exit 0')
+  fake("node-operator-release.sh",'echo "node:$1:$2:$*:$AWS_PROFILE:${AWS_ACCESS_KEY_ID-unset}:$GITHUB_TOKEN" >> "$LOG"; if [ "$1:$2" = "zero:prepare-artifacts" ]; then mkdir -p "$8"; fi; [ "${FAIL_NODE_PHASE:-}" = "$1:$2" ] && exit 7; exit 0')
+  fake("bootstrap-local-installer-artifacts.sh", 'echo "bootstrap:$AWS_PROFILE" >> "$LOG"; : > "$4/local-artifact-authority.json"; if [ "${BOOTSTRAP_FAIL:-}" = 1 ]; then exit 8; fi')
   inventory=release/"installer_artifact_inventory.py"; inventory.write_text('#!/usr/bin/env python3\nimport os,sys\nopen(os.environ["LOG"],"a").write("inventory:%s:%s:%s\\n"%(os.environ["AWS_PROFILE"],os.environ.get("AWS_ACCESS_KEY_ID","unset"),os.environ["GITHUB_TOKEN"]))\nsys.exit(int(os.environ.get("INV_FAIL","0")))\n'); inventory.chmod(0o755)
   fake("prepare-hoodi-zero-release-inputs.sh",'[ -z "${AWS_ACCESS_KEY_ID+x}${AWS_SECRET_ACCESS_KEY+x}${AWS_SESSION_TOKEN+x}${AWS_SECURITY_TOKEN+x}" ] || exit 91; for arg in "$@"; do [ -n "$arg" ] || exit 92; done; echo "prepare:$AWS_PROFILE:$GITHUB_TOKEN" >> "$LOG"; exit 23')
   mirror=release/"mirror-installer-vault-artifacts.py"; mirror.write_text('#!/usr/bin/env python3\nimport os,sys\nscope="non-vault" if "--scope" in sys.argv else "vault"\nstep=scope+":"+sys.argv[1]\nopen(os.environ["LOG"],"a").write("mirror:%s:%s\\n"%(step,os.environ["AWS_PROFILE"]))\nsys.exit(8 if os.environ.get("FAIL_MIRROR_COMMAND")==step else 0)\n'); mirror.chmod(0o755)
@@ -68,7 +69,7 @@ class ArtifactFirst(unittest.TestCase):
    root=Path(temp); env,args,log=self.fixture(root); zero=root/"inputs/zero-resource/zero-resource-inputs.json"; value=json.loads(zero.read_text()); value["baseline_config"]="/foreign"; zero.write_text(json.dumps(value))
    result=subprocess.run([str(CLI),*args],text=True,capture_output=True,env=env); self.assertNotEqual(result.returncode,0); self.assertEqual(len(log.read_text().splitlines()),1); self.assertTrue(log.read_text().startswith("node:verify:"))
  def test_each_artifact_first_stage_failure_blocks_zero_apply(self):
-  for key,value in (("STS_FAIL","1"),("FAIL_NODE_PHASE","zero:prepare-artifacts"),("FAIL_MIRROR_COMMAND","vault:mirror"),("FAIL_MIRROR_COMMAND","vault:verify"),("FAIL_MIRROR_COMMAND","non-vault:mirror"),("FAIL_MIRROR_COMMAND","non-vault:verify")):
+  for key,value in (("STS_FAIL","1"),("FAIL_NODE_PHASE","zero:prepare-artifacts"),("BOOTSTRAP_FAIL","1"),("FAIL_MIRROR_COMMAND","vault:mirror"),("FAIL_MIRROR_COMMAND","vault:verify"),("FAIL_MIRROR_COMMAND","non-vault:mirror"),("FAIL_MIRROR_COMMAND","non-vault:verify")):
    with self.subTest(key=key,value=value),tempfile.TemporaryDirectory() as temp:
     env,args,log=self.fixture(Path(temp)); env[key]=value
     result=subprocess.run([str(CLI),*args],text=True,capture_output=True,env=env); self.assertNotEqual(result.returncode,0)

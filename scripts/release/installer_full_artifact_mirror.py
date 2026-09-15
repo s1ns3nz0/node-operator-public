@@ -103,7 +103,9 @@ def _ecr_registry(source: str) -> tuple[str, str, str] | None:
 
 def _plan(bundle_root: Path, work_dir: Path, inputs_dir: Path, discovery: dict[str, str], release_sha: str) -> tuple[dict[str, Any], list[dict[str, str]], str]:
     try:
-        inventory = build_inventory(bundle_root, release_sha, discovery["aws_account_id"], discovery["aws_region"], discovery["deployment_name"], require_signer_probe=True)
+        authority = work_dir / "local-artifact-authority.json"
+        inventory = build_inventory(bundle_root, release_sha, discovery["aws_account_id"], discovery["aws_region"], discovery["deployment_name"], require_signer_probe=True,
+                                    local_artifact_authority=authority if authority.exists() or authority.is_symlink() else None)
     except InventoryError as error:
         raise FullMirrorError("artifact authority inventory is invalid") from error
     if inventory.get("complete") is not True:

@@ -35,6 +35,8 @@ deposit_validate="$source_root/scripts/ops/validate-hoodi-deposit-data.sh"
 vault_tls="$source_root/scripts/release/prepare-vault-bootstrap-tls.sh"
 resume_helper="$source_root/scripts/release/interactive-hoodi-resume.py"
 artifact_inventory="$source_root/scripts/release/installer_artifact_inventory.py"
+local_artifact_bootstrap="$source_root/scripts/release/bootstrap-local-installer-artifacts.sh"
+local_artifact_authority=''
 existing_validator_verify="$source_root/scripts/release/verify-existing-hoodi-validator.py"
 collector_apply="$source_root/scripts/release/apply-validator-log-collector.py"
 kyverno_apply="$source_root/scripts/release/apply-kyverno-bootstrap.py"
@@ -58,7 +60,12 @@ release_revision="$(jq -er '.source_revision | select(test("^[0-9a-f]{40}$"))' "
 artifact_authority_gate() {
   local account="$1" region="$2" deployment="$3" revision inventory
   revision="$(jq -er '.source_revision | select(test("^[0-9a-f]{40}$"))' "$bundle_root/bundle-manifest.json")" || { printf '%s\n' 'release bundle revision is invalid; no resources changed' >&2; return 65; }
-  inventory="$(python3 "$artifact_inventory" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$region" --deployment-name "$deployment" --require-signer-probe)" || { printf '%s\n' 'required installer artifact authority is unresolved; no resources changed' >&2; return 65; }
+  local -a authority_args=(--bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$region" --deployment-name "$deployment" --require-signer-probe)
+  if [ -n "$local_artifact_authority" ]; then
+    [ -f "$local_artifact_authority" ] && [ ! -L "$local_artifact_authority" ] || { printf '%s\n' 'local artifact authority is unavailable or unsafe; no resources changed' >&2; return 65; }
+    authority_args+=(--local-artifact-authority "$local_artifact_authority")
+  fi
+  inventory="$(python3 "$artifact_inventory" "${authority_args[@]}")" || { printf '%s\n' 'required installer artifact authority is unresolved; no resources changed' >&2; return 65; }
   printf '%s\n' "$inventory"
 }
 
@@ -228,8 +235,8 @@ else
   runtime_defaults="$("$defaults_helper")" || exit $?
   DEFAULT_REGION="$(jq -er '.aws_region' <<<"$runtime_defaults")"
   DEFAULT_DEPLOYMENT_NAME="$(jq -er '.deployment_name' <<<"$runtime_defaults")"
-  DEFAULT_GITHUB_REPOSITORY="$(jq -er '.github_repository' <<<"$runtime_defaults")"; DEFAULT_GITHUB_OWNER_ID="$(jq -er '.github_owner_id' <<<"$runtime_defaults")"; DEFAULT_GITHUB_REPOSITORY_ID="$(jq -er '.github_repository_id' <<<"$runtime_defaults")"
-  DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="$(jq -er '.gitops_client_github_repository' <<<"$runtime_defaults")"; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="$(jq -er '.gitops_client_github_owner_id' <<<"$runtime_defaults")"; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="$(jq -er '.gitops_client_github_repository_id' <<<"$runtime_defaults")"
+  DEFAULT_GITHUB_REPOSITORY="${DEFAULT_GITHUB_REPOSITORY:-$(jq -er '.github_repository' <<<"$runtime_defaults")}"; DEFAULT_GITHUB_OWNER_ID="${DEFAULT_GITHUB_OWNER_ID:-$(jq -er '.github_owner_id' <<<"$runtime_defaults")}"; DEFAULT_GITHUB_REPOSITORY_ID="${DEFAULT_GITHUB_REPOSITORY_ID:-$(jq -er '.github_repository_id' <<<"$runtime_defaults")}"
+  DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="${DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY:-$(jq -er '.gitops_client_github_repository' <<<"$runtime_defaults")}"; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="${DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID:-$(jq -er '.gitops_client_github_owner_id' <<<"$runtime_defaults")}"; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="${DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID:-$(jq -er '.gitops_client_github_repository_id' <<<"$runtime_defaults")}"
 fi
 validate_selected_github_identity() {
   local repository="$1" owner_id="$2" repository_id="$3"
@@ -783,7 +790,11 @@ artifact_prerequisite_dir="$output_dir/artifact-prerequisites"
   --manage-config-recorder "$manage_config_recorder" --ci-evidence-archive-retention-mode "$DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE" \
   --backend-principal-arn "$DEFAULT_BACKEND_PRINCIPAL_ARN" --output-dir "$artifact_prerequisite_dir"
 "$source_root/scripts/release/node-operator-release.sh" zero prepare-artifacts --bundle-root "$bundle_root" \
-  --inputs "$artifact_prerequisite_dir/zero-resource-inputs.json" --work-dir "$output_dir/deployment-work" --include-publishers
+  --inputs "$artifact_prerequisite_dir/zero-resource-inputs.json" --work-dir "$output_dir/deployment-work"
+[ -x "$local_artifact_bootstrap" ] || { printf 'missing executable in release bundle: %s\n' "$local_artifact_bootstrap" >&2; exit 65; }
+"$local_artifact_bootstrap" --bundle-root "$bundle_root" --work-dir "$output_dir/deployment-work" \
+  --account "$account" --region "$region" --deployment-name "$deployment_name" --release-sha "$release_revision"
+local_artifact_authority="$output_dir/deployment-work/local-artifact-authority.json"
 load_authorized_artifacts || exit $?
 printf 'Using canonical release-authorized artifacts:\n  Web3Signer %s\n  PostgreSQL %s\n  Prysm %s\n  Fence %s\n' "$(display_digest "$web3signer_image")" "$(display_digest "$postgres_image")" "$(display_digest "$prysm_image")" "$(display_digest "$fence_image")" >&2
 prepare_args=(--aws-account-id "$account" --aws-region "$region" --name "$deployment_name" --availability-zone "${zones[0]}" --availability-zone "${zones[1]}" --validator-set "$validator_set" --validator-public-key "$validator_key" --withdrawal-address "$withdrawal" --web3signer-image "$web3signer_image" --postgres-image "$postgres_image" --prysm-validator-image "$prysm_image" --signing-fence-image "$fence_image" --kubernetes-api-cidr "$api_cidr" --output-dir "$output_dir/inputs")

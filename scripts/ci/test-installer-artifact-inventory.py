@@ -121,6 +121,28 @@ class ArtifactInventoryTests(unittest.TestCase):
         self.assertEqual(collector["authority"], "approved-validator-runtime-catalog")
         self.assertEqual({entry["component"] for entry in value["unresolved_authority"]}, {"node-operator-client-chart", "prysm-validator", "validator-signing-fence", "validator-signer-identity-probe"})
 
+    def test_local_authority_only_resolves_matching_unresolved_component(self):
+        baseline = json.loads(self.invoke(None, "--require-signer-probe").stdout)
+        prysm = next(item for item in baseline["artifacts"] if item["component"] == "prysm-validator")
+        digest = "sha256:" + "f" * 64
+        authority = self.bundle / "local-artifact-authority.json"
+        authority.write_text(json.dumps({"schema_version": 1, "release_revision": SHA,
+            "deployment": {"aws_account_id": "123456789012", "aws_region": "ap-northeast-2", "deployment_name": "node-operator"},
+            "artifacts": [{"component": "prysm-validator", "source": "local.example/prysm@" + digest,
+                           "destination": prysm["destination"].rsplit("@", 1)[0] + "@" + digest,
+                           "authority": "local-build-sign-publish"}]}))
+        result = self.invoke(None, "--require-signer-probe", "--local-artifact-authority", str(authority))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        item = next(row for row in json.loads(result.stdout)["artifacts"] if row["component"] == "prysm-validator")
+        self.assertEqual(item["source"], "local.example/prysm@" + digest)
+        self.assertEqual(item["authority"], "local-build-sign-publish")
+        authority.write_text(json.dumps({"schema_version": 1, "release_revision": SHA,
+            "deployment": {"aws_account_id": "123456789012", "aws_region": "ap-northeast-2", "deployment_name": "node-operator"},
+            "artifacts": [{"component": "argo-cd", "source": "local.example/argo@" + digest,
+                           "destination": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-argocd@" + digest,
+                           "authority": "local-build-sign-publish"}]}))
+        self.assertEqual(self.invoke(None, "--local-artifact-authority", str(authority)).returncode, 2)
+
     def test_client_chart_authorization_selects_destination_and_orphans_reject(self):
         digest="sha256:"+"f"*64; archive="sha256:"+"e"*64; revision="c"*40
         predicate={"buildDefinition":{"buildType":"https://node-operator.example/gitops-chart/v1","resolvedDependencies":[{"uri":"git+https://github.com/s1ns3nz0/node-operator-gitops","digest":{"gitCommit":revision}}]},"runDetails":{"builder":{"id":chart_authorization.BUILDER}}}
