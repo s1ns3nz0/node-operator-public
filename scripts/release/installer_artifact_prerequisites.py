@@ -47,14 +47,12 @@ PUBLISHER_RESOURCES = {
     "aws_iam_role_policy.github_vault_audit_relay_publisher[0]": "github-vault-audit-relay-publisher",
     "aws_iam_role_policy.github_gitops_client_ecr_publisher[0]": "github-gitops-client-ecr-publisher",
 }
-PUBLISHER_SUBJECTS = {
-    "github-validator-client-mirror": "repo:s1ns3nz0/node-operator:environment:validator-client-ecr-mirror",
-    "github-validator-log-collector-mirror": "repo:s1ns3nz0/node-operator:environment:validator-log-collector-ecr-mirror",
-    "github-vault-audit-relay-publisher": "repo:s1ns3nz0/node-operator:environment:vault-audit-relay-ecr-publish",
-    "github-gitops-client-ecr-publisher": "repo:s1ns3nz0/node-operator-gitops:environment:gitops-client-ecr-publish",
+PUBLISHER_ENVIRONMENTS = {
+    "github-validator-client-mirror": "validator-client-ecr-mirror",
+    "github-validator-log-collector-mirror": "validator-log-collector-ecr-mirror",
+    "github-vault-audit-relay-publisher": "vault-audit-relay-ecr-publish",
+    "github-gitops-client-ecr-publisher": "gitops-client-ecr-publish",
 }
-DEFAULT_GITHUB_IDENTITY = ("s1ns3nz0/node-operator", "258690008", "1353388960")
-DEFAULT_GITOPS_IDENTITY = ("s1ns3nz0/node-operator-gitops", "", "")
 PUBLISHER_REPOSITORIES = {
     "aws_iam_role_policy.github_validator_client_mirror[0]": {"validator-prysm", "validator-fence", "validator-signer-identity-probe"},
     "aws_iam_role_policy.github_validator_signer_identity_probe_mirror[0]": {"validator-signer-identity-probe"},
@@ -66,17 +64,10 @@ ECR_PUSH = frozenset({"ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "e
 ECR_READ = frozenset({"ecr:GetDownloadUrlForLayer"})
 
 
-def _publisher_subjects(suffix: str, github_identity: tuple[str, str, str] = DEFAULT_GITHUB_IDENTITY, gitops_identity: tuple[str, str, str] = DEFAULT_GITOPS_IDENTITY) -> tuple[str, ...]:
-    subject = PUBLISHER_SUBJECTS[suffix]
-    if suffix == "github-gitops-client-ecr-publisher":
-        repository, owner_id, repository_id = gitops_identity
-        if owner_id == repository_id == "":
-            # Compatibility only for the reviewed default profile. A selected
-            # custom profile is never permitted to retain this wildcard form.
-            return (subject, "repo:s1ns3nz0@*/node-operator-gitops@*:environment:gitops-client-ecr-publish")
-        return (f"repo:{repository.split('/')[0]}@{owner_id}/{repository.split('/')[1]}@{repository_id}:environment:gitops-client-ecr-publish",)
-    repository, owner_id, repository_id = github_identity
-    return (f"repo:{repository.split('/')[0]}@{owner_id}/{repository.split('/')[1]}@{repository_id}:environment:{subject.rsplit(':environment:', 1)[1]}",)
+def _publisher_subjects(suffix: str, github_identity: tuple[str, str, str], gitops_identity: tuple[str, str, str]) -> tuple[str, ...]:
+    repository, owner_id, repository_id = gitops_identity if suffix == "github-gitops-client-ecr-publisher" else github_identity
+    owner, name = repository.split("/", 1)
+    return (f"repo:{owner}@{owner_id}/{name}@{repository_id}:environment:{PUBLISHER_ENVIRONMENTS[suffix]}",)
 
 
 class PrerequisiteError(ValueError):
@@ -140,40 +131,32 @@ def _expected(name: str) -> tuple[dict[str, tuple[str, str | None]], dict[str, s
     return repositories, keys, allowed
 
 
-def _identity(value: Any, default: tuple[str, str, str], label: str) -> tuple[str, str, str]:
-    if value is None:
-        return default
+def _identity(value: Any, label: str) -> tuple[str, str, str]:
     if not isinstance(value, dict) or set(value) != {"repository", "owner_id", "repository_id"}:
         raise PrerequisiteError(f"Terraform plan {label} identity is invalid")
     identity = tuple(value.get(key) for key in ("repository", "owner_id", "repository_id"))
     if not all(isinstance(item, str) for item in identity) or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", identity[0]):
         raise PrerequisiteError(f"Terraform plan {label} identity is invalid")
-    if label == "GitOps" and identity == DEFAULT_GITOPS_IDENTITY:
-        return identity
-    if label == "GitHub" and identity == (DEFAULT_GITHUB_IDENTITY[0], "", ""):
-        return DEFAULT_GITHUB_IDENTITY
-    if not all(re.fullmatch(r"[0-9]+", item) for item in identity[1:]):
+    if not all(re.fullmatch(r"[1-9][0-9]*", item) for item in identity[1:]):
         raise PrerequisiteError(f"Terraform plan {label} identity requires exact numeric IDs")
     return identity
 
 
 def _plan_identities(plan: dict[str, Any]) -> tuple[tuple[str, str, str], tuple[str, str, str]]:
     values = plan.get("variables")
-    if values is None:
-        return DEFAULT_GITHUB_IDENTITY, DEFAULT_GITOPS_IDENTITY
     if not isinstance(values, dict):
-        raise PrerequisiteError("Terraform plan variables are invalid")
+        raise PrerequisiteError("Terraform plan lacks explicit publisher identities")
     def value(name: str) -> Any:
         row = values.get(name)
         return row.get("value") if isinstance(row, dict) and set(row) == {"value"} else None
-    github = _identity({"repository": value("github_repository"), "owner_id": value("github_owner_id"), "repository_id": value("github_repository_id")}, DEFAULT_GITHUB_IDENTITY, "GitHub")
-    gitops = _identity({"repository": value("gitops_client_github_repository"), "owner_id": value("gitops_client_github_owner_id"), "repository_id": value("gitops_client_github_repository_id")}, DEFAULT_GITOPS_IDENTITY, "GitOps")
+    github = _identity({"repository": value("github_repository"), "owner_id": value("github_owner_id"), "repository_id": value("github_repository_id")}, "GitHub")
+    gitops = _identity({"repository": value("gitops_client_github_repository"), "owner_id": value("gitops_client_github_owner_id"), "repository_id": value("gitops_client_github_repository_id")}, "GitOps")
     return github, gitops
 
 
 def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, include_publishers: bool = False) -> None:
     _context(account, region, name)
-    github_identity, gitops_identity = _plan_identities(plan)
+    github_identity, gitops_identity = _plan_identities(plan) if include_publishers else (None, None)
     expected_repositories, expected_keys, allowed = _expected(name)
     if include_publishers:
         allowed = allowed | set(PUBLISHER_RESOURCES)
@@ -307,7 +290,9 @@ def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, in
         raise PrerequisiteError("Terraform plan omitted an exact artifact prerequisite")
 
 
-def _validate_publisher(address: str, after: dict[str, Any], detail: dict[str, Any], source: dict[str, Any], account: str, region: str, name: str, github_identity: tuple[str, str, str] = DEFAULT_GITHUB_IDENTITY, gitops_identity: tuple[str, str, str] = DEFAULT_GITOPS_IDENTITY) -> None:
+def _validate_publisher(address: str, after: dict[str, Any], detail: dict[str, Any], source: dict[str, Any], account: str, region: str, name: str, github_identity: tuple[str, str, str] | None, gitops_identity: tuple[str, str, str] | None) -> None:
+    if github_identity is None or gitops_identity is None:
+        raise PrerequisiteError("publisher identities are required")
     suffix = PUBLISHER_RESOURCES[address]
     expected_name = f"{name}-baseline-{suffix}"
     if address.startswith("aws_iam_role."):
@@ -432,7 +417,7 @@ def _known_or_unknown(detail: dict[str, Any], field: str, expected: str | None, 
         raise PrerequisiteError("Terraform plan KMS identity is foreign")
 
 
-def _validate_before(address: str, before: dict[str, Any], repositories: dict[str, tuple[str, str | None]], keys: dict[str, str], all_before: dict[str, Any], account: str, region: str, name: str, github_identity: tuple[str, str, str] = DEFAULT_GITHUB_IDENTITY, gitops_identity: tuple[str, str, str] = DEFAULT_GITOPS_IDENTITY) -> None:
+def _validate_before(address: str, before: dict[str, Any], repositories: dict[str, tuple[str, str | None]], keys: dict[str, str], all_before: dict[str, Any], account: str, region: str, name: str, github_identity: tuple[str, str, str] | None, gitops_identity: tuple[str, str, str] | None) -> None:
     """Prove a planned update/no-op continues an owned prerequisite, not adoption."""
     if address in repositories:
         repository_name, kms_label = repositories[address]
@@ -479,10 +464,12 @@ def _one(resources: dict[str, dict[str, Any]], address: str, kind: str) -> dict[
     return item["values"]
 
 
-def projection(state: dict[str, Any], account: str, region: str, name: str, fingerprint: str, include_publishers: bool = False) -> dict[str, Any]:
+def projection(state: dict[str, Any], account: str, region: str, name: str, fingerprint: str, include_publishers: bool = False, github_identity: tuple[str, str, str] | None = None, gitops_identity: tuple[str, str, str] | None = None) -> dict[str, Any]:
     _context(account, region, name)
     if not SHA256.fullmatch(fingerprint):
         raise PrerequisiteError("input fingerprint is invalid")
+    if include_publishers and (github_identity is None or gitops_identity is None):
+        raise PrerequisiteError("state publisher validation requires explicit identities")
     values = state.get("values")
     root = values.get("root_module") if isinstance(values, dict) else None
     rows = root.get("resources") if isinstance(root, dict) else None
@@ -546,7 +533,7 @@ def projection(state: dict[str, Any], account: str, region: str, name: str, fing
         for address in sorted(PUBLISHER_RESOURCES):
             kind = "aws_iam_role" if address.startswith("aws_iam_role.") else "aws_iam_role_policy"
             item = _one(resources, address, kind)
-            _validate_publisher(address, item, {"after_unknown": {}}, {}, account, region, name)
+            _validate_publisher(address, item, {"after_unknown": {}}, {}, account, region, name, github_identity, gitops_identity)
     return {"schema_version": 1, "aws_account_id": account, "aws_region": region, "deployment_name": name,
             "input_fingerprint": fingerprint, "state_key": STATE_KEY, "repositories": repositories, "kms_keys": kms}
 
@@ -689,15 +676,30 @@ def main(argv: list[str] | None = None) -> int:
         part.add_argument("--region", required=True)
         part.add_argument("--name", required=True)
         part.add_argument("--include-publishers", action="store_true")
+        part.add_argument("--github-repository")
+        part.add_argument("--github-owner-id")
+        part.add_argument("--github-repository-id")
+        part.add_argument("--gitops-client-github-repository")
+        part.add_argument("--gitops-client-github-owner-id")
+        part.add_argument("--gitops-client-github-repository-id")
     state_args = sub.choices["state"]
     state_args.add_argument("--fingerprint", required=True)
     state_args.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
+        identities = None
+        if args.include_publishers:
+            identities = (
+                _identity({"repository": args.github_repository, "owner_id": args.github_owner_id, "repository_id": args.github_repository_id}, "GitHub"),
+                _identity({"repository": args.gitops_client_github_repository, "owner_id": args.gitops_client_github_owner_id, "repository_id": args.gitops_client_github_repository_id}, "GitOps"),
+            )
         if args.command == "plan":
-            validate_plan(_read(args.plan), args.account, args.region, args.name, args.include_publishers)
+            plan = _read(args.plan)
+            if identities is not None and _plan_identities(plan) != identities:
+                raise PrerequisiteError("Terraform plan publisher identities differ from explicit inputs")
+            validate_plan(plan, args.account, args.region, args.name, args.include_publishers)
         else:
-            _safe_output(args.output, projection(_read(args.state), args.account, args.region, args.name, args.fingerprint, args.include_publishers))
+            _safe_output(args.output, projection(_read(args.state), args.account, args.region, args.name, args.fingerprint, args.include_publishers, *(identities or (None, None))))
     except PrerequisiteError as error:
         parser.error(str(error))
     return 0

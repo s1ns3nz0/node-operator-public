@@ -256,7 +256,7 @@ def mirror(state_dir: Path, bundle_root: Path, discovery: dict, profile: str, re
         for path,value in ((manifest,expected_consumer),(receipt,expected_receipt),(state_dir/"vault-pre-eks-artifact-mirror-binding.json",expected_binding),(state_dir/"vault-pre-eks-artifact-mirror-verified.json",expected_binding)):
             if path.exists() and _read(path) != value: raise MirrorError("partial pre-EKS mirror output differs from this attempt")
     tool=index["components"]["gitops-oci-mirror"].get("image_ref",""); chart_tool=index["components"]["vault-bootstrap"].get("image_ref","")
-    if not isinstance(tool,str) or not tool.startswith("ghcr.io/s1ns3nz0/node-operator/gitops-oci-mirror@sha256:") or not isinstance(chart_tool,str) or "@sha256:" not in chart_tool: raise MirrorError("pinned mirror tooling is invalid")
+    if not isinstance(tool,str) or not re.fullmatch(r"ghcr\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/gitops-oci-mirror@sha256:[a-f0-9]{64}", tool) or not isinstance(chart_tool,str) or "@sha256:" not in chart_tool: raise MirrorError("pinned mirror tooling is invalid")
     lock=None
     if pre_eks:
         lock=state_dir/".vault-pre-eks-artifact-mirror.lock"

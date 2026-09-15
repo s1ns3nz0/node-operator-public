@@ -7,16 +7,16 @@ variable "enable_gitops_client_ecr_publisher" {
 variable "gitops_client_github_repository" {
   description = "Exact non-secret GitHub repository allowed to publish the reviewed GitOps client OCI image."
   type        = string
-  default     = "s1ns3nz0/node-operator-gitops"
+  default     = ""
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.gitops_client_github_repository))
-    error_message = "gitops_client_github_repository must be an exact owner/repository name."
+    condition     = var.gitops_client_github_repository == "" || can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.gitops_client_github_repository))
+    error_message = "gitops_client_github_repository must be blank or an exact owner/repository name."
   }
 }
 
 variable "gitops_client_github_owner_id" {
-  description = "Exact non-secret numeric GitHub owner ID for a custom GitOps publisher repository; blank retains the reviewed legacy profile."
+  description = "Exact non-secret numeric GitHub owner ID for the GitOps publisher repository."
   type        = string
   default     = ""
   validation {
@@ -26,7 +26,7 @@ variable "gitops_client_github_owner_id" {
 }
 
 variable "gitops_client_github_repository_id" {
-  description = "Exact non-secret numeric GitHub repository ID for a custom GitOps publisher repository; blank retains the reviewed legacy profile."
+  description = "Exact non-secret numeric GitHub repository ID for the GitOps publisher repository."
   type        = string
   default     = ""
   validation {
@@ -49,11 +49,7 @@ variable "gitops_client_ecr_publisher_environment" {
 locals {
   gitops_client_ecr_repository_name   = "${local.name_prefix}-gitops-client"
   gitops_client_chart_repository_name = "${local.gitops_client_ecr_repository_name}/node-operator-client"
-  gitops_client_legacy_identity       = var.gitops_client_github_repository == "s1ns3nz0/node-operator-gitops" && var.gitops_client_github_owner_id == "" && var.gitops_client_github_repository_id == ""
-  gitops_client_oidc_subjects = local.gitops_client_legacy_identity ? [
-    "repo:${var.gitops_client_github_repository}:environment:${var.gitops_client_ecr_publisher_environment}",
-    "repo:${split("/", var.gitops_client_github_repository)[0]}@*/${split("/", var.gitops_client_github_repository)[1]}@*:environment:${var.gitops_client_ecr_publisher_environment}",
-  ] : ["repo:${split("/", var.gitops_client_github_repository)[0]}@${var.gitops_client_github_owner_id}/${split("/", var.gitops_client_github_repository)[1]}@${var.gitops_client_github_repository_id}:environment:${var.gitops_client_ecr_publisher_environment}"]
+  gitops_client_oidc_subjects         = ["repo:${split("/", var.gitops_client_github_repository)[0]}@${var.gitops_client_github_owner_id}/${split("/", var.gitops_client_github_repository)[1]}@${var.gitops_client_github_repository_id}:environment:${var.gitops_client_ecr_publisher_environment}"]
 }
 
 # This repository is intentionally separate from private_gitops["nodes"].
@@ -170,8 +166,8 @@ resource "aws_iam_role" "github_gitops_client_ecr_publisher" {
   lifecycle {
     prevent_destroy = true
     precondition {
-      condition     = local.gitops_client_legacy_identity || (var.gitops_client_github_owner_id != "" && var.gitops_client_github_repository_id != "")
-      error_message = "A custom GitOps publisher repository requires both exact numeric GitHub owner and repository IDs; it cannot inherit legacy wildcard trust."
+      condition     = var.gitops_client_github_repository != "" && var.gitops_client_github_owner_id != "" && var.gitops_client_github_repository_id != ""
+      error_message = "GitOps publisher trust requires an exact repository and both exact numeric GitHub owner and repository IDs."
     }
   }
 }

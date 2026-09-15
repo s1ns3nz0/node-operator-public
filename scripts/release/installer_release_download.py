@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 from installer_release_signature import extract_verified_bundle, MAX_METADATA, _json
 from installer_oci_binding import PAYLOAD_MEMBER, verify_bound_payload
 
-REPOSITORY = "s1ns3nz0/node-operator"
+REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[a-zA-Z0-9.-]+)?\Z")
 CHUNK = re.compile(r"chunks/(oci-payload-[0-9]{5}\.tar)\Z")
 
@@ -61,20 +61,20 @@ def _download(url: str, destination: Path, maximum: int) -> None:
     destination.chmod(0o600)
 
 
-def prepare_release(tag: str, destination: Path, expected_revision: str, *,
+def prepare_release(tag: str, destination: Path, expected_revision: str, *, repository: str,
                     trusted_public_key: Path, trusted_key_sha256: str) -> dict:
     """Expose the bundle and OCI assets only after complete authentication.
 
     Canonical inventory uses neutral offline destination values. They neither
     select an AWS account nor authorize deployment. Inputs must stay quiescent.
     """
-    if not TAG.fullmatch(tag):
-        raise DownloadError("release tag is invalid")
+    if not TAG.fullmatch(tag) or not REPOSITORY.fullmatch(repository):
+        raise DownloadError("release tag or repository is invalid")
     if (not destination.is_absolute() or destination.exists() or destination.is_symlink()
             or destination.parent.is_symlink() or not destination.parent.is_dir()
             or stat.S_IMODE(destination.parent.stat().st_mode) != 0o700):
         raise DownloadError("new destination below a private directory is required")
-    base = f"https://github.com/{REPOSITORY}/releases/download/{tag}/"
+    base = f"https://github.com/{repository}/releases/download/{tag}/"
     with tempfile.TemporaryDirectory(prefix=".release-download-", dir=destination.parent) as temporary:
         stage = Path(temporary) / "release"
         stage.mkdir(mode=0o700)
@@ -120,7 +120,7 @@ def prepare_release(tag: str, destination: Path, expected_revision: str, *,
         verified = verify_bound_payload(stage / "bundle", expected_revision, payload,
             expected_bundle_manifest_sha256=binding["authenticated_bundle_manifest_sha256"],
             account="000000000000", region="ap-northeast-2", deployment_name="release-check")
-        result = {"schema_version": 1, "release_tag": tag, "release_revision": expected_revision,
+        result = {"schema_version": 1, "release_repository": repository, "release_tag": tag, "release_revision": expected_revision,
             "authenticated_bundle_manifest_sha256": binding["authenticated_bundle_manifest_sha256"],
             "public_key_sha256": trusted_key_sha256, "verified_roots": verified["verified_roots"],
             "bundle_root": str(destination / "bundle"), "oci_payload_dir": str(destination / "oci-payload"),
@@ -135,6 +135,7 @@ def main() -> int:
     import sys
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--repository", required=True, help="Exact owner/repository that publishes this release")
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--expected-revision", required=True)
     parser.add_argument("--trusted-public-key", required=True, type=Path)
@@ -142,7 +143,7 @@ def main() -> int:
     parser.add_argument("--launch", action="store_true", help="Run the authenticated single interactive installer after all verification passes")
     args = parser.parse_args()
     try:
-        result = prepare_release(args.tag, args.destination, args.expected_revision,
+        result = prepare_release(args.tag, args.destination, args.expected_revision, repository=args.repository,
             trusted_public_key=args.trusted_public_key, trusted_key_sha256=args.trusted_key_sha256)
     except (ValueError, OSError, TypeError, tarfile.TarError):
         print("Release download or authentication failed; no installer code was executed.", file=sys.stderr)

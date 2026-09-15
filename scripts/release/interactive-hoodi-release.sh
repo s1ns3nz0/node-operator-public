@@ -233,9 +233,8 @@ DEFAULT_GITHUB_REPOSITORY="${DEFAULT_GITHUB_REPOSITORY:-}"; DEFAULT_GITHUB_OWNER
 DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="${DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY:-}"; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="${DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID:-}"; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="${DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID:-}"
 validate_selected_github_identity() {
   local repository="$1" owner_id="$2" repository_id="$3"
-  [ -z "$repository$owner_id$repository_id" ] && return 0
   [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$owner_id" =~ ^[1-9][0-9]*$ && "$repository_id" =~ ^[1-9][0-9]*$ ]] || {
-    printf '%s\n' 'Custom GitHub trust requires an exact repository and both positive numeric owner/repository IDs; no AWS mutation requested.' >&2
+    printf '%s\n' 'GitHub trust requires an exact repository and both positive numeric owner/repository IDs; no AWS mutation requested.' >&2
     return 64
   }
 }

@@ -68,17 +68,24 @@ class DownloadTests(unittest.TestCase):
         self.assertLessEqual(len(raw), maximum)
         destination.write_bytes(raw)
 
-    def prepare(self):
+    def prepare(self, repository="operator/release"):
         with patch.object(download, "_download", side_effect=self.fetch), patch("installer_oci_binding.build_inventory", return_value=self.inventory):
             return download.prepare_release("v0.2.0", self.output, self.signed.revision,
-                trusted_public_key=self.signed.public, trusted_key_sha256=self.signed.key_hash)
+                repository=repository, trusted_public_key=self.signed.public, trusted_key_sha256=self.signed.key_hash)
+
+    def test_operator_selects_exact_release_repository(self):
+        self.prepare("operator/release")
+        self.assertTrue(all(url.startswith("https://github.com/operator/release/releases/download/v0.2.0/") for url in self.urls))
+        with self.assertRaises(download.DownloadError):
+            download.prepare_release("v0.2.0", self.root / "invalid", self.signed.revision,
+                repository="operator/release/extra", trusted_public_key=self.signed.public, trusted_key_sha256=self.signed.key_hash)
 
     def test_real_crypto_and_payload_roundtrip(self):
         result = self.prepare()
         self.assertEqual(result["verified_roots"], 1)
         self.assertTrue((self.output / "bundle" / self.entrypoint).is_file())
         self.assertTrue((self.output / "authenticated-release.json").is_file())
-        self.assertTrue(all(url.startswith("https://github.com/s1ns3nz0/node-operator/releases/download/v0.2.0/") for url in self.urls))
+        self.assertTrue(all(url.startswith("https://github.com/operator/release/releases/download/v0.2.0/") for url in self.urls))
 
     def test_bad_signature_stops_before_chunk_download(self):
         path = self.root / "provenance-input.json"
@@ -145,7 +152,7 @@ class DownloadTests(unittest.TestCase):
             self.assertEqual(environment["NODE_OPERATOR_AUTHENTICATED_BUNDLE_MANIFEST_SHA256"], verified["authenticated_bundle_manifest_sha256"])
 
     def test_cli_is_nonexecuting_by_default_and_bounds_launch_failure(self):
-        arguments = ["download", "--tag", "v0.2.0", "--destination", str(self.output),
+        arguments = ["download", "--tag", "v0.2.0", "--repository", "operator/release", "--destination", str(self.output),
                      "--expected-revision", self.signed.revision,
                      "--trusted-public-key", str(self.signed.public),
                      "--trusted-key-sha256", self.signed.key_hash]

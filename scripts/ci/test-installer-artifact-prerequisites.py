@@ -27,6 +27,8 @@ ACCOUNT = "123456789012"
 REGION = "ap-northeast-2"
 DEPLOYMENT = "node-operator"
 FINGERPRINT = "a" * 64
+GITHUB_IDENTITY = ("operator/release", "101", "102")
+GITOPS_IDENTITY = ("operator/gitops", "103", "104")
 
 
 def tags(resource_name: str) -> dict[str, str]:
@@ -65,7 +67,10 @@ def plan_fixture() -> dict[str, object]:
             unknown = {}
         config.append(config_row)
         changes.append({"address": address, "mode": "managed", "change": {"actions": ["create"], "after": after, "after_unknown": unknown}})
-    return {"format_version": "1.2", "configuration": {"root_module": {"resources": config, "data_resources": []}},
+    return {"format_version": "1.2", "variables": {
+        "github_repository": {"value": GITHUB_IDENTITY[0]}, "github_owner_id": {"value": GITHUB_IDENTITY[1]}, "github_repository_id": {"value": GITHUB_IDENTITY[2]},
+        "gitops_client_github_repository": {"value": GITOPS_IDENTITY[0]}, "gitops_client_github_owner_id": {"value": GITOPS_IDENTITY[1]}, "gitops_client_github_repository_id": {"value": GITOPS_IDENTITY[2]},
+    }, "configuration": {"root_module": {"resources": config, "data_resources": []}},
             "resource_changes": changes, "resource_drift": []}
 
 
@@ -117,7 +122,7 @@ class PrerequisiteTests(unittest.TestCase):
         legacy = "node-operator-baseline-github-validator-log-collector-mirror"
         self.assertEqual(helper._publisher_role_name(legacy), legacy)
         first = "node-operator-example-baseline-github-validator-log-collector-mirror"
-        second = "node-operator-example-baseline-github-validator-log-collector-mirror"
+        second = "node-operator-another-baseline-github-validator-log-collector-mirror"
         self.assertEqual(len(helper._publisher_role_name(first)), 64)
         self.assertNotEqual(helper._publisher_role_name(first), helper._publisher_role_name(second))
 
@@ -144,8 +149,8 @@ class PrerequisiteTests(unittest.TestCase):
             if address.startswith("aws_iam_role."):
                 subject_key = "StringLike" if suffix in {"github-vault-audit-relay-publisher", "github-gitops-client-ecr-publisher"} else "StringEquals"
                 condition = {"StringEquals": {"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"}}
-                condition.setdefault(subject_key, {})["token.actions.githubusercontent.com:sub"] = list(helper._publisher_subjects(suffix)) if len(helper._publisher_subjects(suffix)) > 1 else helper._publisher_subjects(suffix)[0]
-                if suffix in {"github-vault-audit-relay-publisher", "github-gitops-client-ecr-publisher"}: condition["StringEquals"]["token.actions.githubusercontent.com:repository"] = "s1ns3nz0/node-operator-gitops" if suffix == "github-gitops-client-ecr-publisher" else "s1ns3nz0/node-operator"
+                condition.setdefault(subject_key, {})["token.actions.githubusercontent.com:sub"] = helper._publisher_subjects(suffix, GITHUB_IDENTITY, GITOPS_IDENTITY)[0]
+                if suffix in {"github-vault-audit-relay-publisher", "github-gitops-client-ecr-publisher"}: condition["StringEquals"]["token.actions.githubusercontent.com:repository"] = GITOPS_IDENTITY[0] if suffix == "github-gitops-client-ecr-publisher" else GITHUB_IDENTITY[0]
                 after = {"name": f"{DEPLOYMENT}-baseline-{suffix}", "tags": {key: value for key, value in tags("unused").items() if key != "Name"}, "assume_role_policy": json.dumps({"Statement": [{"Effect":"Allow", "Action": "sts:AssumeRoleWithWebIdentity", "Principal": {"Federated": f"arn:aws:iam::{ACCOUNT}:oidc-provider/token.actions.githubusercontent.com"}, "Condition": condition}]})}
             else:
                 role_suffix = "github-validator-client-mirror" if "signer_identity_probe" in address else suffix
@@ -194,11 +199,11 @@ class PrerequisiteTests(unittest.TestCase):
         for item in plan["resource_changes"]:
             if item["address"] in helper.PUBLISHER_RESOURCES:
                 state["values"]["root_module"]["resources"].append({"address": item["address"], "mode": "managed", "type": item["address"].split(".")[0], "values": copy.deepcopy(item["change"]["after"])})
-        helper.projection(state, ACCOUNT, REGION, DEPLOYMENT, FINGERPRINT, include_publishers=True)
+        helper.projection(state, ACCOUNT, REGION, DEPLOYMENT, FINGERPRINT, include_publishers=True, github_identity=GITHUB_IDENTITY, gitops_identity=GITOPS_IDENTITY)
         role = next(item for item in state["values"]["root_module"]["resources"] if item["address"] == "aws_iam_role.github_validator_client_mirror[0]")
         role["values"]["assume_role_policy"] = '{"Statement":[]}'
         with self.assertRaises(helper.PrerequisiteError):
-            helper.projection(state, ACCOUNT, REGION, DEPLOYMENT, FINGERPRINT, include_publishers=True)
+            helper.projection(state, ACCOUNT, REGION, DEPLOYMENT, FINGERPRINT, include_publishers=True, github_identity=GITHUB_IDENTITY, gitops_identity=GITOPS_IDENTITY)
         plan["resource_changes"][-1]["change"]["after"]["policy"] = json.dumps({"Statement": [{"Action": "iam:PassRole", "Resource": "*"}]})
         with self.assertRaises(helper.PrerequisiteError):
             helper.validate_plan(plan, ACCOUNT, REGION, DEPLOYMENT, include_publishers=True)
@@ -225,7 +230,7 @@ class PrerequisiteTests(unittest.TestCase):
         trust = json.dumps({"Statement": [{"Effect": "Allow", "Action": "sts:AssumeRoleWithWebIdentity", "Principal": {"Federated": f"arn:aws:iam::{ACCOUNT}:oidc-provider/token.actions.githubusercontent.com"}, "Condition": condition}]})
         helper._validate_publisher_trust(trust, suffix, ACCOUNT, github, gitops)
         with self.assertRaises(helper.PrerequisiteError):
-            helper._validate_publisher_trust(trust, suffix, ACCOUNT, helper.DEFAULT_GITHUB_IDENTITY, helper.DEFAULT_GITOPS_IDENTITY)
+            helper._validate_publisher_trust(trust, suffix, ACCOUNT, GITHUB_IDENTITY, GITOPS_IDENTITY)
         plan["variables"]["github_owner_id"] = {"value": ""}
         with self.assertRaises(helper.PrerequisiteError):
             helper._plan_identities(plan)

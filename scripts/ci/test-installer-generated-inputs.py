@@ -14,23 +14,26 @@ class GeneratedInputs(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def zero(self, name, *extra):
+    def zero(self, name, *extra, identities=True):
         output = self.tmp / name
-        return subprocess.run([str(ZERO), "--aws-account-id", ACCOUNT,
+        command = [str(ZERO), "--aws-account-id", ACCOUNT,
             "--aws-region", "ap-northeast-2", "--availability-zone", "ap-northeast-2a",
             "--availability-zone", "ap-northeast-2c", "--name", "node-2401010000-a1b2",
-            "--backend-principal-arn", ROLE, "--output-dir", str(output), *extra], text=True,
-            capture_output=True), output
+            "--backend-principal-arn", ROLE]
+        if identities:
+            command += ["--github-repository", "example/operator",
+            "--github-owner-id", "101", "--github-repository-id", "202",
+            "--gitops-client-github-repository", "example/gitops", "--gitops-client-github-owner-id", "303",
+            "--gitops-client-github-repository-id", "404"]
+        return subprocess.run([*command, "--output-dir", str(output), *extra], text=True, capture_output=True), output
 
-    def test_default_identity_omitted_and_replica_default(self):
+    def test_explicit_identity_and_replica_default(self):
         result, output = self.zero("default")
         self.assertEqual(result.returncode, 0, result.stderr)
         baseline = json.loads((output / "baseline.tfvars.json").read_text())
         self.assertEqual(baseline["audit_replica_region"], "ap-northeast-1")
-        for field in ("github_repository", "github_owner_id", "github_repository_id",
-                      "gitops_client_github_repository", "gitops_client_github_owner_id",
-                      "gitops_client_github_repository_id"):
-            self.assertNotIn(field, baseline)
+        self.assertEqual(baseline["github_repository"], "example/operator")
+        self.assertEqual(baseline["gitops_client_github_repository"], "example/gitops")
 
     def test_explicit_replica_and_exact_identity_propagate(self):
         result, output = self.zero("custom", "--audit-replica-region", "ap-northeast-1",
@@ -46,7 +49,7 @@ class GeneratedInputs(unittest.TestCase):
     def test_same_replica_and_partial_identity_rejected_before_output(self):
         result, output = self.zero("same", "--audit-replica-region", "ap-northeast-2")
         self.assertNotEqual(result.returncode, 0); self.assertFalse(output.exists())
-        result, output = self.zero("partial", "--github-repository", "example/operator")
+        result, output = self.zero("partial", "--github-repository", "example/operator", identities=False)
         self.assertNotEqual(result.returncode, 0); self.assertFalse(output.exists())
 
     def test_wrapper_has_pre_aws_explicit_withdrawal_and_random_bounded_name(self):

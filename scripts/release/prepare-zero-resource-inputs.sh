@@ -35,7 +35,7 @@ case "$account" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])
 [[ "$aws_region" =~ ^[a-z]{2}-[a-z0-9-]+-[0-9]+$ ]] || usage
 [ -n "$audit_replica_region" ] || { audit_replica_region='ap-northeast-1'; [ "$aws_region" = ap-northeast-1 ] && audit_replica_region='ap-northeast-2'; }
 [[ "$audit_replica_region" =~ ^[a-z]{2}-[a-z0-9-]+-[0-9]+$ ]] && [ "$audit_replica_region" != "$aws_region" ] || usage
-validate_github_binding() { local repo="$1" owner="$2" repo_id="$3"; [ -z "$repo$owner$repo_id" ] && return 0; [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$owner" =~ ^[0-9]+$ && "$repo_id" =~ ^[0-9]+$ ]] || usage; }
+validate_github_binding() { local repo="$1" owner="$2" repo_id="$3"; [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$owner" =~ ^[1-9][0-9]*$ && "$repo_id" =~ ^[1-9][0-9]*$ ]] || usage; }
 validate_github_binding "$github_repository" "$github_owner_id" "$github_repository_id"
 validate_github_binding "$gitops_client_github_repository" "$gitops_client_github_owner_id" "$gitops_client_github_repository_id"
 case "$name" in [a-z][a-z0-9-][a-z0-9-]*[a-z0-9]) [ "${#name}" -le 20 ] ;; *) usage ;; esac
@@ -91,8 +91,8 @@ jq -n --arg account "$account" --arg name "$name" --arg region "$aws_region" --a
    enable_temporary_ssm_ops_host:false,temporary_ssm_ops_host_termination_at:"",
    enable_argocd_bootstrap_runner:false,enable_argocd_bootstrap_cluster_admin:false,
    enable_vault_bootstrap_runner:false,enable_vault_bootstrap_cluster_admin:false}
-  + (if $github_repository == "" then {} else {github_repository:$github_repository,github_owner_id:$github_owner_id,github_repository_id:$github_repository_id} end)
-  + (if $gitops_client_github_repository == "" then {} else {gitops_client_github_repository:$gitops_client_github_repository,gitops_client_github_owner_id:$gitops_client_github_owner_id,gitops_client_github_repository_id:$gitops_client_github_repository_id} end)
+  + {github_repository:$github_repository,github_owner_id:$github_owner_id,github_repository_id:$github_repository_id}
+  + {gitops_client_github_repository:$gitops_client_github_repository,gitops_client_github_owner_id:$gitops_client_github_owner_id,gitops_client_github_repository_id:$gitops_client_github_repository_id}
 ' > "$baseline"
 jq -n --arg account "$account" --arg name "$name" --arg region "$aws_region" --argjson zones "$(printf '%s\n' "${availability_zones[@]}" | jq -R . | jq -s .)" --arg bootstrap "$bootstrap" --arg foundation "$foundation" --arg baseline "$baseline" \
   '{schema_version:1,aws_account_id:$account,aws_region:$region,availability_zones:$zones,name:$name,bootstrap_config:$bootstrap,foundation_config:$foundation,baseline_config:$baseline}' > "$metadata"

@@ -288,7 +288,16 @@ zero_prepare_artifacts_phase() {
   )
   local -a publisher_validation_args=(--account "$account" --region "$region" --name "$deployment_name")
   if [ "$include_publishers" = true ]; then
+    local github_repository github_owner_id github_repository_id gitops_repository gitops_owner_id gitops_repository_id
+    github_repository="$(jq -er '.github_repository | select(test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))' "$baseline_config")" || fail "baseline config lacks an exact operator GitHub repository"
+    github_owner_id="$(jq -er '.github_owner_id | select(test("^[1-9][0-9]*$"))' "$baseline_config")" || fail "baseline config lacks an exact operator GitHub owner ID"
+    github_repository_id="$(jq -er '.github_repository_id | select(test("^[1-9][0-9]*$"))' "$baseline_config")" || fail "baseline config lacks an exact operator GitHub repository ID"
+    gitops_repository="$(jq -er '.gitops_client_github_repository | select(test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))' "$baseline_config")" || fail "baseline config lacks an exact GitOps repository"
+    gitops_owner_id="$(jq -er '.gitops_client_github_owner_id | select(test("^[1-9][0-9]*$"))' "$baseline_config")" || fail "baseline config lacks an exact GitOps owner ID"
+    gitops_repository_id="$(jq -er '.gitops_client_github_repository_id | select(test("^[1-9][0-9]*$"))' "$baseline_config")" || fail "baseline config lacks an exact GitOps repository ID"
     publisher_validation_args+=(--include-publishers)
+    publisher_validation_args+=(--github-repository "$github_repository" --github-owner-id "$github_owner_id" --github-repository-id "$github_repository_id")
+    publisher_validation_args+=(--gitops-client-github-repository "$gitops_repository" --gitops-client-github-owner-id "$gitops_owner_id" --gitops-client-github-repository-id "$gitops_repository_id")
     artifact_targets+=(
       -target=aws_iam_role.github_validator_client_mirror
       -target=aws_iam_role_policy.github_validator_client_mirror
@@ -542,7 +551,7 @@ zero_apply() {
     (.gitops_client_ecr_repository_url.value | test("^[0-9]{12}\\.dkr\\.ecr\\." + $region + "\\.amazonaws\\.com/[a-z0-9][a-z0-9._/-]*$")) and
     (.github_gitops_client_ecr_publisher_role_arn.value | test("^arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]+$"))
   ' "$baseline_output" >/dev/null || fail "baseline did not emit the required GitOps publisher handoff"
-  jq '{schema_version:"v1",gitops_repository:"s1ns3nz0/node-operator-gitops",publisher_environment:"gitops-client-ecr-publish",aws_account_id:.deployment_account_id.value,chart_repository:.gitops_client_ecr_repository_url.value,publisher_role_arn:.github_gitops_client_ecr_publisher_role_arn.value}' "$baseline_output" > "$gitops_handoff"
+  jq --arg gitops_repository "$(jq -er '.gitops_client_github_repository | select(test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))' "$baseline_config")" '{schema_version:"v1",gitops_repository:$gitops_repository,publisher_environment:"gitops-client-ecr-publish",aws_account_id:.deployment_account_id.value,chart_repository:.gitops_client_ecr_repository_url.value,publisher_role_arn:.github_gitops_client_ecr_publisher_role_arn.value}' "$baseline_output" > "$gitops_handoff"
   jq --arg region "$deployment_region" --slurpfile foundation "$foundation_output" --slurpfile bootstrap "$bootstrap_output" '
     {schema_version:"v1",aws_region:$region,aws_account_id:.deployment_account_id.value,
      cluster_name:.cluster_name.value,

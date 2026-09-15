@@ -116,7 +116,7 @@ def _plan(bundle_root: Path, work_dir: Path, inputs_dir: Path, discovery: dict[s
     if not isinstance(rows, dict): raise FullMirrorError("artifact prerequisite projection is invalid")
     tool = next((x for x in inventory.get("artifacts", []) if isinstance(x, dict) and x.get("component") == "gitops-oci-mirror"), None)
     tool_ref = tool.get("source") if isinstance(tool, dict) else None
-    if not isinstance(tool_ref, str) or not re.fullmatch(r"ghcr\.io/s1ns3nz0/node-operator/gitops-oci-mirror@sha256:[a-f0-9]{64}", tool_ref):
+    if not isinstance(tool_ref, str) or not re.fullmatch(r"ghcr\.io/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*/gitops-oci-mirror@sha256:[a-f0-9]{64}", tool_ref):
         raise FullMirrorError("pinned OCI mirror tool is unavailable")
     planned: list[dict[str, str]] = []
     for item in inventory.get("artifacts", []):

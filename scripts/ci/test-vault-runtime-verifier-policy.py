@@ -66,17 +66,15 @@ def validate(source, signer_source):
     output = block(source, "output", "github_vault_runtime_ci_verifier_role_arn")
     assert "try(aws_iam_role.github_vault_runtime_verifier[0].arn, null)" in output
 
-    # Destination trust is derived from the selected repository and numeric
-    # IDs, while preserving the reviewed legacy defaults when all overrides
-    # are blank. It must not fall back to the release-signer source pin.
+    # Every publisher, including the release signer, derives its trust from
+    # the explicit operator repository and immutable numeric IDs.
     for expected in (
-        'github_destination_identity_is_legacy     = var.github_repository == "s1ns3nz0/node-operator" && var.github_owner_id == "" && var.github_repository_id == ""',
-        'github_destination_owner_id               = local.github_destination_identity_is_legacy ? "258690008" : var.github_owner_id',
-        'github_destination_repository_id          = local.github_destination_identity_is_legacy ? "1353388960" : var.github_repository_id',
-        'github_destination_oidc_subject_prefix    = "repo:${split("/", var.github_repository)[0]}@${local.github_destination_owner_id}/${split("/", var.github_repository)[1]}@${local.github_destination_repository_id}"',
-        'release_signer_source_oidc_subject_prefix = var.github_oidc_subject_prefix',
+        'github_destination_oidc_subject_prefix    = "repo:${split("/", var.github_repository)[0]}@${var.github_owner_id}/${split("/", var.github_repository)[1]}@${var.github_repository_id}"',
+        'github_destination_identity_is_explicit   = var.github_repository != "" && var.github_owner_id != "" && var.github_repository_id != ""',
+        'release_signer_source_oidc_subject_prefix = local.github_destination_oidc_subject_prefix',
     ):
         assert expected in signer_source, f"destination identity derivation missing: {expected}"
+    assert "s1ns3nz0/node-operator" not in signer_source
 
 
 root = Path(__file__).resolve().parents[2]
@@ -101,9 +99,8 @@ for bad_source, bad_signer_source in (
     raise AssertionError("unsafe verifier policy or trust mutation passed")
 
 for bad_signer_source in (
-    signer_source.replace('"258690008"', '"*"'),
-    signer_source.replace('"1353388960"', '"*"'),
-    signer_source.replace('github_destination_owner_id               = local.github_destination_identity_is_legacy ? "258690008" : var.github_owner_id', 'github_destination_owner_id = var.github_owner_id'),
+    signer_source.replace('var.github_owner_id}', '"*"}'),
+    signer_source.replace('local.github_destination_oidc_subject_prefix', '"*"'),
 ):
     try:
         validate(source, bad_signer_source)
