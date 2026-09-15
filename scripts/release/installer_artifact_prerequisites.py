@@ -201,7 +201,8 @@ def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, in
         actions = detail.get("actions")
         if change.get("mode") == "data":
             after = detail.get("after")
-            if address not in PLAN_DATA_READS or actions != ["read"] or _source_row(config_rows, address) is None or not isinstance(after, dict):
+            allowed_data_read = address in PLAN_DATA_READS or address.startswith("data.aws_iam_policy_document.github_")
+            if not allowed_data_read or actions != ["read"] or _source_row(config_rows, address) is None or not isinstance(after, dict):
                 raise PrerequisiteError(f"Terraform plan contains an unexpected data read: {address}")
             if address == "data.aws_iam_policy_document.kms_key_administrator":
                 if not _contains_string(after, f"arn:aws:iam::{account}:root"):
