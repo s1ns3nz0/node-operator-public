@@ -17,11 +17,13 @@ Usage:
     --public-repository NAME --app-client-id CLIENT_ID \
     [--app-private-key /absolute/path/to/key.pem]
 
+When --app-private-key is omitted interactively, the script asks for its
+absolute path without displaying the input. Non-interactive callers must pass it.
+
 The GitHub App must already be created and installed in GitHub's UI with
 Actions: Read-only permission and access restricted to the GitOps repository.
 This script never prints or stores the private-key contents.
 USAGE
-  exit 64
 }
 
 owner=''; gitops_repository=''; public_repository=''; app_client_id=''; app_private_key=''
@@ -32,16 +34,20 @@ while (($#)); do
     --public-repository) public_repository="${2:-}"; shift 2 ;;
     --app-client-id) app_client_id="${2:-}"; shift 2 ;;
     --app-private-key) app_private_key="${2:-}"; shift 2 ;;
-    -h|--help) usage ;;
-    *) usage ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage; exit 64 ;;
   esac
 done
 
-[[ "$owner" =~ ^[A-Za-z0-9-]+$ && "$gitops_repository" =~ ^[A-Za-z0-9_.-]+$ && "$public_repository" =~ ^[A-Za-z0-9_.-]+$ ]] || usage
+[[ "$owner" =~ ^[A-Za-z0-9-]+$ && "$gitops_repository" =~ ^[A-Za-z0-9_.-]+$ && "$public_repository" =~ ^[A-Za-z0-9_.-]+$ ]] || { usage; exit 64; }
 [[ "$app_client_id" =~ ^[A-Za-z0-9_-]{8,128}$ ]] || { printf '%s\n' 'GitHub App Client ID is invalid.' >&2; exit 64; }
-if [[ -n "$app_private_key" ]]; then
-  [[ "$app_private_key" = /* && -f "$app_private_key" && ! -L "$app_private_key" ]] || { printf '%s\n' 'App private key must be a regular absolute file.' >&2; exit 64; }
+if [[ -z "$app_private_key" ]]; then
+  [[ -t 0 && -t 1 ]] || { printf '%s\n' 'Pass --app-private-key /absolute/path/to/key.pem in non-interactive mode.' >&2; exit 64; }
+  printf 'Absolute path to the GitHub App private-key PEM (input is not displayed): ' >&2
+  IFS= read -r -s app_private_key
+  printf '\n' >&2
 fi
+[[ "$app_private_key" = /* && -f "$app_private_key" && ! -L "$app_private_key" ]] || { printf '%s\n' 'App private key must be a regular absolute file.' >&2; exit 64; }
 
 command -v gh >/dev/null 2>&1 || { printf '%s\n' 'missing command: gh' >&2; exit 69; }
 gh auth status >/dev/null 2>&1 || { printf '%s\n' 'GitHub CLI is not authenticated; run gh auth login first.' >&2; exit 69; }
@@ -64,4 +70,4 @@ if [[ -n "$app_private_key" ]]; then
 fi
 
 printf 'PASS: GitOps repository %s is private and public repository %s has environment gitops-evidence-reader.\n' "$gitops" "$public"
-printf 'Client ID is configured. %s\n' "$([[ -n "$app_private_key" ]] && printf 'App private key secret is configured.' || printf 'App private key remains unset; complete the GitHub UI App installation, then rerun with --app-private-key.')"
+printf '%s\n' 'Client ID and App private-key secret are configured.'
