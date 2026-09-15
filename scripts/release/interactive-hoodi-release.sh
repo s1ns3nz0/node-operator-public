@@ -559,9 +559,15 @@ export AWS_PROFILE="$(jq -er '.aws_profile' <<<"$runtime_defaults")" AWS_REGION=
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
 validator_set="$DEFAULT_VALIDATOR_SET"; deployment_name="$DEFAULT_DEPLOYMENT_NAME"
 [[ "$deployment_name" =~ ^[a-z][a-z0-9-]{1,18}[a-z0-9]$ ]] || { printf '%s\n' 'generated deployment name is invalid' >&2; exit 65; }
-withdrawal="$(prompt 'Enter user-owned withdrawal address (0x...)')"
-withdrawal_confirmation="$(prompt 'Re-enter the withdrawal address to confirm custody')"
-[ "$withdrawal" = "$withdrawal_confirmation" ] && [[ "$withdrawal" =~ ^0x[0-9a-fA-F]{40}$ ]] || { printf '%s\n' 'withdrawal address confirmation did not match a valid address' >&2; exit 64; }
+withdrawal="$DEFAULT_WITHDRAWAL"
+if [ -n "$withdrawal" ]; then
+  printf 'Using withdrawal address from local configuration: %s\n' "$withdrawal" >&2
+  [[ "$withdrawal" =~ ^0x[0-9a-fA-F]{40}$ ]] || { printf '%s\n' 'configured withdrawal address is invalid' >&2; exit 64; }
+else
+  withdrawal="$(prompt 'Enter user-owned withdrawal address (0x...)')"
+  withdrawal_confirmation="$(prompt 'Re-enter the withdrawal address to confirm custody')"
+  [ "$withdrawal" = "$withdrawal_confirmation" ] && [[ "$withdrawal" =~ ^0x[0-9a-fA-F]{40}$ ]] || { printf '%s\n' 'withdrawal address confirmation did not match a valid address' >&2; exit 64; }
+fi
 audit_replica_region=ap-northeast-1; [ "$region" = ap-northeast-1 ] && audit_replica_region=ap-northeast-2
 printf 'Deployment context: account=%s primary=%s audit-replica=%s name=%s repository=%s\n' "$account" "$region" "$audit_replica_region" "$deployment_name" "$DEFAULT_GITHUB_REPOSITORY" >&2
 # A shared default role would tie independent deployments to the lifecycle of
@@ -647,6 +653,7 @@ if [ -z "$existing_keystore_dir" ]; then
   existing_keystore_dir="$(prompt_default 'Existing validator keystore directory (blank to generate a new key)' '')"
 fi
 if [ -n "$existing_keystore_dir" ]; then
+  printf 'Using existing validator keystore directory from local configuration: %s\n' "$existing_keystore_dir" >&2
   case "$existing_keystore_dir" in /*) ;; *) printf '%s\n' 'existing keystore directory must be absolute' >&2; exit 64 ;; esac
   [ -d "$existing_keystore_dir" ] && [ ! -L "$existing_keystore_dir" ] || { printf '%s\n' 'existing keystore directory must be a real directory' >&2; exit 65; }
   existing_keystore_dir="$(cd "$existing_keystore_dir" && pwd -P)"
