@@ -312,8 +312,8 @@ def _validate_publisher(address: str, after: dict[str, Any], detail: dict[str, A
     expected_name = f"{name}-baseline-{suffix}"
     if address.startswith("aws_iam_role."):
         expected_name = _publisher_role_name(expected_name)
-    if after.get("name") != expected_name:
-        raise PrerequisiteError("publisher prerequisite name is invalid")
+    if address.startswith("aws_iam_role.") and after.get("name") != expected_name:
+        raise PrerequisiteError("publisher prerequisite role name is invalid")
     if address.startswith("aws_iam_role."):
         _tags(after, account, region, name, expected_name, include_name=False)
         _validate_publisher_trust(after.get("assume_role_policy"), suffix, account, github_identity, gitops_identity)
