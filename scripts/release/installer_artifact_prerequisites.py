@@ -179,7 +179,11 @@ def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, in
     required = set(expected_repositories) | set(expected_keys) | {"aws_iam_role.kms_administrator"}
     required.update(address for address in allowed if address.startswith("aws_ecr_lifecycle_policy."))
     if include_publishers:
-        required.update(PUBLISHER_RESOURCES)
+        # Some publisher closures (for example Vault audit relay) are optional
+        # at this pre-Vault phase. Require and validate every publisher that
+        # Terraform selected, without demanding a disabled optional closure.
+        planned_addresses = {change.get("address") for change in plan["resource_changes"] if isinstance(change, dict)}
+        required.update(address for address in PUBLISHER_RESOURCES if address in planned_addresses)
     before_values = {
         change["address"]: change["change"].get("before")
         for change in plan["resource_changes"]
