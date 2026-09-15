@@ -1,0 +1,91 @@
+# Every Kyverno workload image is mirrored into the immutable private ECR
+# repository. Tags are source-digest tokens, so ECR immutability prevents tag
+# replacement. No registry credential is embedded: EKS node identity pulls it.
+admissionController:
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}
+    runAsNonRoot: true
+  initContainer:
+    image:
+      registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+      repository: node-operator-baseline-gitops-nodes
+      tag: "e4f0f36f8a8c18427394894274278a94dbef5afefed915e38cf74f5a04cf9d64@sha256:e4f0f36f8a8c18427394894274278a94dbef5afefed915e38cf74f5a04cf9d64"
+    resources:
+      requests: {cpu: "100m", memory: "128Mi"}
+      limits: {cpu: "250m", memory: "256Mi"}
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities: {drop: ["ALL"]}
+      runAsNonRoot: true
+  container:
+    image:
+      registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+      repository: node-operator-baseline-gitops-nodes
+      tag: "90ca6e44900da3471732b6954039505fb7348862496fea3f51f7859bdf93e508@sha256:90ca6e44900da3471732b6954039505fb7348862496fea3f51f7859bdf93e508"
+    resources:
+      requests: {cpu: "250m", memory: "256Mi"}
+      limits: {cpu: "1", memory: "1Gi"}
+backgroundController:
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}
+    runAsNonRoot: true
+  image:
+    registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: node-operator-baseline-gitops-nodes
+    tag: "071724e5ed7901633e068aa928dc4e00ae486a500f6bfb38cdb48491d6e83bca@sha256:071724e5ed7901633e068aa928dc4e00ae486a500f6bfb38cdb48491d6e83bca"
+  resources:
+    requests: {cpu: "100m", memory: "128Mi"}
+    limits: {cpu: "500m", memory: "512Mi"}
+cleanupController:
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}
+    runAsNonRoot: true
+  image:
+    registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: node-operator-baseline-gitops-nodes
+    tag: "323bb87053050889e5e84b3281fd0a8c723aed6a11ad3a069dd467597d030038@sha256:323bb87053050889e5e84b3281fd0a8c723aed6a11ad3a069dd467597d030038"
+  resources:
+    requests: {cpu: "100m", memory: "128Mi"}
+    limits: {cpu: "500m", memory: "512Mi"}
+reportsController:
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}
+    runAsNonRoot: true
+  image:
+    registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: node-operator-baseline-gitops-nodes
+    tag: "a854a474fe5c8e71ddc5371d575faecf62f2e582482bfd90e221660a9818c9e0@sha256:a854a474fe5c8e71ddc5371d575faecf62f2e582482bfd90e221660a9818c9e0"
+  resources:
+    requests: {cpu: "100m", memory: "128Mi"}
+    limits: {cpu: "500m", memory: "512Mi"}
+test:
+  image:
+    registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: node-operator-baseline-gitops-nodes
+    tag: "65a64df8e8cbbee7f1b679843d688c5e4bca50898a4ba59a5b12b8e79797f1bc@sha256:65a64df8e8cbbee7f1b679843d688c5e4bca50898a4ba59a5b12b8e79797f1bc"
+webhooksCleanup:
+  image:
+    registry: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: node-operator-baseline-gitops-nodes
+    tag: "65a64df8e8cbbee7f1b679843d688c5e4bca50898a4ba59a5b12b8e79797f1bc@sha256:65a64df8e8cbbee7f1b679843d688c5e4bca50898a4ba59a5b12b8e79797f1bc"

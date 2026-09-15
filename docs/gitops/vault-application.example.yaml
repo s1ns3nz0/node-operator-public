@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/REPLACE_WITH_APPROVED_GITOPS_REPO.git
+    targetRevision: REPLACE_WITH_REVIEWED_COMMIT
+    path: platform/vault
+    helm:
+      # Copy vault-values.example.yaml to this approved GitOps source as
+      # platform/vault/vault-values.yaml before enabling this Application.
+      valueFiles:
+        - vault-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false

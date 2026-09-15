@@ -1,0 +1,176 @@
+# This is the base template consumed only by the private Vault bootstrap
+# runner. It intentionally references existing non-secret Kubernetes and AWS
+# resources; it creates neither credentials nor secret values. The immutable
+# runtime image fields below are placeholders: the runner must pass the
+# canonical catalog-bound image overlay as a later Helm values file. Do not
+# apply this base template by itself.
+global:
+  tlsDisable: false
+
+server:
+  enabled: true
+  # The Terraform Pod Identity association is namespace=vault,
+  # serviceAccount=vault. No AWS access keys are mounted in this chart.
+  serviceAccount:
+    create: true
+    name: vault
+  # Vault uses its locally mounted server ServiceAccount token as the
+  # Kubernetes TokenReview credential. The pinned Vault chart renders this
+  # exact ServiceAccount into a system:auth-delegator ClusterRoleBinding.
+  # Do not replace it with a stored reviewer JWT.
+  authDelegator:
+    enabled: true
+  image:
+    # The later canonical overlay supplies the selected private ECR
+    # repository and catalog-approved immutable tag@digest.
+    repository: REPLACE_WITH_PRIVATE_VAULT_SERVER_REPOSITORY
+    tag: REPLACE_WITH_PRIVATE_VAULT_SERVER_TAG
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = false
+        disable_mlock = true
+
+        listener "tcp" {
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_disable = 0
+          tls_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+          tls_key_file = "/vault/userconfig/vault-tls/tls.key"
+          tls_client_ca_file = "/vault/userconfig/vault-tls/ca.crt"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+
+          # A new StatefulSet member starts with an empty PVC. Join it to the
+          # bootstrap peer through the same private mTLS material used by the
+          # listener so KMS auto-unseal can retrieve the replicated state.
+          retry_join {
+            leader_api_addr         = "https://vault-0.vault-internal:8200"
+            leader_ca_cert_file     = "/vault/userconfig/vault-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-tls/tls.crt"
+            leader_client_key_file  = "/vault/userconfig/vault-tls/tls.key"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
+        # Terraform output vault_unseal_key_arn is inserted only in the
+        # approved GitOps runner workspace. The Vault Pod Identity role, not
+        # this file, grants seal/unseal access.
+        seal "awskms" {
+          region = "REPLACE_WITH_VAULT_AWS_REGION"
+          kms_key_id = "REPLACE_WITH_VAULT_UNSEAL_KEY_ARN"
+        }
+  dataStorage:
+    enabled: true
+    size: 20Gi
+    # The private bootstrap verifies or creates this exact deployment-bound
+    # EBS CSI StorageClass before Helm runs. Existing PVCs are never migrated.
+    storageClass: gp3-encrypted
+  resources:
+    requests: {cpu: "500m", memory: "1Gi"}
+    limits: {cpu: "2", memory: "2Gi"}
+  statefulSet:
+    securityContext:
+      pod:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      container:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: ["ALL"]}
+        runAsNonRoot: true
+  # Separate per-Pod encrypted PVC for append-only audit device files. This is
+  # intentionally distinct from the Raft data claim. Enabling it alone does
+  # not configure an audit device; the post-initialization verification gate
+  # remains mandatory.
+  auditStorage:
+    enabled: true
+    size: 20Gi
+    storageClass: gp3-encrypted
+    accessMode: ReadWriteOnce
+    labels:
+      node-operator.io/encryption-policy: baseline-ebs-kms
+      node-operator.io/purpose: vault-validator-audit
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+  volumes:
+    - name: userconfig-vault-tls
+      secret:
+        secretName: vault-tls
+        defaultMode: 420
+    - name: tmp
+      emptyDir: {}
+  volumeMounts:
+    - name: userconfig-vault-tls
+      mountPath: /vault/userconfig/vault-tls
+      readOnly: true
+    # The chart already provides writable /home/vault. With a read-only root
+    # filesystem, Vault also needs this explicit writable scratch directory.
+    - name: tmp
+      mountPath: /tmp
+  # The image must be the immutable digest emitted by the protected
+  # vault-audit-relay-ecr-publish workflow. This sidecar is the sole listener
+  # for the local Unix audit socket and tails only the separate audit PVC.
+  extraContainers:
+    - name: vault-validator-audit-relay
+      image: REPLACE_WITH_PRIVATE_VAULT_AUDIT_RELAY_DIGEST
+      args:
+        - --file-path=/vault/audit/validator-audit.json
+        - --socket-path=/vault/audit/validator-audit.sock
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+      resources:
+        requests: {cpu: "100m", memory: "128Mi"}
+        limits: {cpu: "250m", memory: "256Mi"}
+      volumeMounts:
+        - name: audit
+          mountPath: /vault/audit
+
+# A private service alone is not a network boundary. The approved GitOps
+# source must also apply namespace NetworkPolicies that allow only Vault pods,
+# in-cluster workloads, and the private release-runner/CodeBuild paths.
+injector:
+  enabled: true
+  # Leave externalVaultAddr unset: this release owns the in-cluster Vault
+  # server. The chart will point injected agents at the local active service.
+  # This is the image injected into application Pods, distinct from the
+  # injector webhook Deployment below. The canonical later overlay supplies
+  # private catalog-bound image references; private EKS workers intentionally
+  # have no Docker Hub egress.
+  agentImage:
+    repository: REPLACE_WITH_PRIVATE_VAULT_AGENT_REPOSITORY
+    tag: REPLACE_WITH_PRIVATE_VAULT_AGENT_TAG
+  image:
+    repository: REPLACE_WITH_PRIVATE_VAULT_INJECTOR_REPOSITORY
+    tag: REPLACE_WITH_PRIVATE_VAULT_INJECTOR_TAG
+  resources:
+    requests: {cpu: "100m", memory: "128Mi"}
+    limits: {cpu: "500m", memory: "512Mi"}
+  securityContext:
+    pod:
+      runAsNonRoot: true
+      runAsUser: 100
+      runAsGroup: 1000
+      fsGroup: 1000
+      seccompProfile: {type: RuntimeDefault}
+    container:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities: {drop: ["ALL"]}
+      runAsNonRoot: true

@@ -1,0 +1,1 @@
+{"schema_version":1,"dependency":"paperthin","repository":"https://github.com/LilMGenius/paperthin","release":"v0.17.4","revision":"3bca079a51bcfff5dafb53d1d7f9f523d66ee317","installer":"npx skills@latest add LilMGenius/paperthin --global --agent '*'","update_policy":"Explicit, reviewed updates only."}

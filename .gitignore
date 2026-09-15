@@ -5,10 +5,7 @@
 
 # Local-only harness and operator records. Existing tracked files remain
 # available in repository history; new execution output must not enter Git.
-/harness/
 /.harness/
-/plans/
-/reports/
 
 # Test, scanner, and runtime by-products.
 /artifacts/

@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: node-operator-workloads
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # Replace only after the GitOps repository is approved.
+    repoURL: https://github.com/REPLACE_WITH_APPROVED_GITOPS_REPO.git
+    targetRevision: REPLACE_WITH_REVIEWED_COMMIT
+    path: clusters/node-operator
+  destination:
+    # Resolve the in-cluster destination from the approved runner.
+    server: https://kubernetes.default.svc
+    namespace: node-operator
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=false

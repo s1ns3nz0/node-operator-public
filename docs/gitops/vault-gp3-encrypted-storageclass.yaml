@@ -1,0 +1,15 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-encrypted
+  labels:
+    node-operator.io/managed-by: vault-bootstrap
+    node-operator.io/storage-profile: gp3-encrypted
+provisioner: ebs.csi.aws.com
+parameters:
+  encrypted: "true"
+  kmsKeyId: REPLACE_WITH_VAULT_EBS_KMS_KEY_ARN
+  type: gp3
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: true

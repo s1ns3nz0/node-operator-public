@@ -1,0 +1,52 @@
+# This policy deliberately isolates ingress only. A deny-egress policy is a
+# separate reviewed change because Vault needs DNS, the Kubernetes API, and the
+# private AWS KMS path for auto-unseal. Apply after the Helm chart labels are
+# rendered and confirmed, before allowing any Vault client workload.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vault-ingress-private-only
+  namespace: vault
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+      component: server
+  policyTypes:
+    - Ingress
+  ingress:
+    # Vault API and Raft peer traffic are restricted to the Vault server set.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+              component: server
+      ports:
+        - protocol: TCP
+          port: 8200
+        - protocol: TCP
+          port: 8201
+    # Application namespaces require an explicit namespace and pod label.
+    # Label governance is an RBAC responsibility; do not grant either label
+    # to an unreviewed namespace or workload.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              node-operator.io/vault-client-access: "true"
+          podSelector:
+            matchLabels:
+              node-operator.io/vault-client: "true"
+      ports:
+        - protocol: TCP
+          port: 8200
+    # The internal NLB preserves the source address for the private signer
+    # CodeBuild ENIs. Both approved private subnets are explicit; there is no
+    # public CIDR, NAT, or general Internet ingress path.
+    - from:
+        - ipBlock:
+            cidr: 10.80.0.0/20
+        - ipBlock:
+            cidr: 10.80.16.0/20
+      ports:
+        - protocol: TCP
+          port: 8200
