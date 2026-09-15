@@ -154,7 +154,7 @@ fi
 TRACE="$trace" PATH="$fake_bin:$PATH" "$script" infrastructure apply --bundle-root "$bundle" --inputs "$inputs/hoodi-zero-release-inputs.json" --work-dir "$scratch/work" >/dev/null
 rg -F "release verify --bundle-root $bundle" "$trace" >/dev/null
 rg -F "inventory --bundle-root $bundle --release-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --aws-account-id 123456789012 --aws-region ap-northeast-2 --deployment-name node-op-001 --require-signer-probe profile=default" "$trace" >/dev/null
-rg -F "release zero prepare-artifacts --bundle-root $bundle --inputs $inputs/zero-resource/zero-resource-inputs.json --work-dir $scratch/work" "$trace" >/dev/null
+rg -F "release zero prepare-artifacts --bundle-root $bundle --inputs $inputs/zero-resource/zero-resource-inputs.json --work-dir $scratch/work --include-publishers" "$trace" >/dev/null
 rg -F "mirror mirror --bundle-root $bundle --state-dir $scratch/work --work-dir $scratch/work --inputs-dir $inputs/zero-resource --account 123456789012 --region ap-northeast-2 --deployment-name node-op-001 --profile default --release-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa profile=default" "$trace" >/dev/null
 rg -F "mirror mirror --scope non-vault --bundle-root $bundle --state-dir $scratch/work --work-dir $scratch/work --inputs-dir $inputs/zero-resource --account 123456789012 --region ap-northeast-2 --deployment-name node-op-001 --profile default --release-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa profile=default" "$trace" >/dev/null
 rg -F "release zero apply --bundle-root $bundle --inputs $inputs/zero-resource/zero-resource-inputs.json --work-dir $scratch/work" "$trace" >/dev/null

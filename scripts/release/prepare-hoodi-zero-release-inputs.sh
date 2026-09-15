@@ -11,7 +11,7 @@ usage() {
   exit 64
 }
 
-account=''; validator_set=''; validator_public_key=''; withdrawal_address=''
+account=''; validator_set=''; validator_public_key=''; withdrawal_address=''; ci_evidence_archive_retention_mode=COMPLIANCE
 release_identity=''
 web3signer_image=''; postgres_image=''; prysm_image=''; fence_image=''; kubernetes_api_cidr=''; output_dir=''; name='node-operator'; aws_region='ap-northeast-2'; audit_replica_region=''; github_repository=''; github_owner_id=''; github_repository_id=''; gitops_client_github_repository=''; gitops_client_github_owner_id=''; gitops_client_github_repository_id=''; availability_zones=(); principals=(); manage_config_recorder=true
 while [ "$#" -gt 0 ]; do
@@ -39,11 +39,13 @@ while [ "$#" -gt 0 ]; do
     --release-revision) release_identity="${2:-}"; shift 2 ;;
     --backend-principal-arn) principals+=("${2:-}"); shift 2 ;;
     --manage-config-recorder) manage_config_recorder="${2:-}"; shift 2 ;;
+    --ci-evidence-archive-retention-mode) ci_evidence_archive_retention_mode="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
 
 case "$account" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;; *) usage ;; esac
+case "$ci_evidence_archive_retention_mode" in COMPLIANCE|GOVERNANCE) ;; *) usage ;; esac
 case "$validator_set" in hoodi-[a-z0-9][a-z0-9-]*) ;; *) usage ;; esac
 case "$output_dir" in /*) ;; *) usage ;; esac
 set --
@@ -67,6 +69,7 @@ zero_args=(--aws-account-id "$account" --aws-region "$aws_region" --name "$name"
 [ -z "$audit_replica_region" ] || zero_args+=(--audit-replica-region "$audit_replica_region")
 for pair in "--github-repository:$github_repository" "--github-owner-id:$github_owner_id" "--github-repository-id:$github_repository_id" "--gitops-client-github-repository:$gitops_client_github_repository" "--gitops-client-github-owner-id:$gitops_client_github_owner_id" "--gitops-client-github-repository-id:$gitops_client_github_repository_id"; do key="${pair%%:*}"; value="${pair#*:}"; [ -z "$value" ] || zero_args+=("$key" "$value"); done
 zero_args+=(--manage-config-recorder "$manage_config_recorder")
+zero_args+=(--ci-evidence-archive-retention-mode "$ci_evidence_archive_retention_mode")
 for zone in "${availability_zones[@]-}"; do
   [ -n "$zone" ] && zero_args+=(--availability-zone "$zone")
 done

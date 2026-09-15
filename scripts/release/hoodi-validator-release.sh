@@ -27,7 +27,7 @@ USAGE
 
 command_name="${1:-}"; [ -n "$command_name" ] || usage
 shift
-operation=''; bundle_root=''; inputs=''; work_dir=''; session_handoff=''; output_dir=''; ops_inputs=''; plan_file=''; expected_sha=''; aws_region='ap-northeast-2'; profile="${AWS_PROFILE:-default}"; allow_create=false; deposit_attestation=''; public_deposit_verification=''; private_evidence=''; signer_evidence=''; confirm_public_key=''; confirm_withdrawal_address=''; keystore_dir=''; ceremony_dir=''; custody_result_output=''; custody_operation_id=''; activation_receipt=''; deployment_name=''; release_revision=''; operation_id=''
+operation=''; bundle_root=''; inputs=''; work_dir=''; session_handoff=''; output_dir=''; ops_inputs=''; plan_file=''; expected_sha=''; aws_region='ap-northeast-2'; profile="${AWS_PROFILE:-default}"; ci_evidence_archive_retention_mode=COMPLIANCE; allow_create=false; deposit_attestation=''; public_deposit_verification=''; private_evidence=''; signer_evidence=''; confirm_public_key=''; confirm_withdrawal_address=''; keystore_dir=''; ceremony_dir=''; custody_result_output=''; custody_operation_id=''; activation_receipt=''; deployment_name=''; release_revision=''; operation_id=''
 case "$command_name" in
   interactive|infrastructure|deploy|custody|evidence|activate|ops-inputs|ops-access|stage)
     [ "$#" -gt 0 ] || usage
@@ -49,6 +49,7 @@ while [ "$#" -gt 0 ]; do
     --expected-sha) expected_sha="${2:-}"; shift 2 ;;
     --aws-region) aws_region="${2:-}"; shift 2 ;;
     --profile) profile="${2:-}"; shift 2 ;;
+    --ci-evidence-archive-retention-mode) ci_evidence_archive_retention_mode="${2:-}"; shift 2 ;;
     --allow-create) allow_create=true; shift ;;
     --private-eks-session-handoff) session_handoff="${2:-}"; shift 2 ;;
     --deposit-attestation) deposit_attestation="${2:-}"; shift 2 ;;
@@ -69,6 +70,7 @@ while [ "$#" -gt 0 ]; do
     *) usage ;;
   esac
 done
+case "$ci_evidence_archive_retention_mode" in COMPLIANCE|GOVERNANCE) ;; *) usage ;; esac
 
 # Completion receipts are optional for direct custody calls and paired for the
 # resumable installer. Reject an orphan or malformed binding before any AWS or
@@ -162,7 +164,7 @@ if [ "$command_name" = interactive ]; then
     --aws-account-id "$account" --aws-region "$aws_region" --availability-zone "${availability_zones[0]}" --availability-zone "${availability_zones[1]}" --validator-set "$validator_set" --validator-public-key "$validator_key" \
     --withdrawal-address "$withdrawal_address" --web3signer-image "$web3signer_image" \
     --postgres-image "$postgres_image" --prysm-validator-image "$prysm_image" \
-    --signing-fence-image "$fence_image" --kubernetes-api-cidr "$kubernetes_api_cidr" --output-dir "$output_dir" ${backend_args[@]+"${backend_args[@]}"}
+    --signing-fence-image "$fence_image" --kubernetes-api-cidr "$kubernetes_api_cidr" --ci-evidence-archive-retention-mode "$ci_evidence_archive_retention_mode" --output-dir "$output_dir" ${backend_args[@]+"${backend_args[@]}"}
   if [ "$operation" = deploy ]; then
     "$0" deploy apply --bundle-root "$bundle_root" --inputs "$output_dir/hoodi-zero-release-inputs.json" --work-dir "$output_dir/deployment-work" --private-eks-session-handoff "$output_dir/private-eks-session.json" --allow-create --profile "$profile"
     printf 'NEXT: run %s interactive custody --bundle-root %s --inputs %s/hoodi-zero-release-inputs.json --private-eks-session-handoff %s/private-eks-session.json --custody-dir /new-absolute/local-custody-directory\n' "${0##*/}" "$bundle_root" "$output_dir" "$output_dir"
@@ -218,7 +220,10 @@ case "$command_name" in
     selected_env=(env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_SECURITY_TOKEN -u BASH_ENV AWS_PROFILE="$profile" AWS_REGION="$input_region")
     "${selected_env[@]}" aws sts get-caller-identity --cli-connect-timeout 10 --cli-read-timeout 20 --query Account --output text | grep -qx "$account" || { printf '%s\n' 'selected AWS profile does not match release account' >&2; exit 65; }
     "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe >/dev/null || { printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
-    "${selected_env[@]}" "$release_dir/node-operator-release.sh" zero prepare-artifacts --bundle-root "$bundle_root" --inputs "$zero_inputs" --work-dir "$work_dir"
+    # Establish the exact deployment-bound ECR/KMS and publisher OIDC closure
+    # before artifact mirroring. Inventory and mirror verification remain
+    # fail-closed authority gates; this never accepts unapproved artifacts.
+    "${selected_env[@]}" "$release_dir/node-operator-release.sh" zero prepare-artifacts --bundle-root "$bundle_root" --inputs "$zero_inputs" --work-dir "$work_dir" --include-publishers
     adapter=("$release_dir/mirror-installer-vault-artifacts.py")
     mirror_args=(--bundle-root "$bundle_root" --state-dir "$work_dir" --work-dir "$work_dir" --inputs-dir "$(dirname "$zero_inputs")" --account "$account" --region "$input_region" --deployment-name "$deployment_name" --profile "$profile" --release-sha "$revision")
     if [ -e "$work_dir/vault-artifact-mirror-receipt.json" ] || [ -e "$work_dir/vault-artifact-manifest.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-binding.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-verified.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-uncertain.json" ] || [ -L "$work_dir/vault-artifact-mirror-receipt.json" ] || [ -L "$work_dir/vault-artifact-manifest.json" ] || [ -L "$work_dir/vault-pre-eks-artifact-mirror-uncertain.json" ]; then vault_operation=resume; else vault_operation=mirror; fi

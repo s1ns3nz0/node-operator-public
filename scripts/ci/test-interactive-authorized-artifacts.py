@@ -98,6 +98,7 @@ def run(script, fake, work, answers, **extra):
     # Artifact/custody tests supply an explicit synthetic user configuration;
     # the production installer must not supply a maintainer-wallet default.
     env["DEFAULT_WITHDRAWAL"] = "0x" + "1" * 40
+    env.update({"DEFAULT_GITHUB_REPOSITORY": "example/operator", "DEFAULT_GITHUB_OWNER_ID": "101", "DEFAULT_GITHUB_REPOSITORY_ID": "102", "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY": "example/gitops", "DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID": "103", "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID": "104"})
     env.update(extra)  # Explicit fixture inputs take precedence over ambient cleanup.
     proc = subprocess.Popen([str(script)], stdin=slave, stdout=slave, stderr=slave, env=env); os.close(slave); os.write(master, answers.encode()); out = bytearray(); deadline = time.monotonic() + 15
     try:

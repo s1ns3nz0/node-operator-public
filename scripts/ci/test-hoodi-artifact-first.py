@@ -40,7 +40,7 @@ class ArtifactFirst(unittest.TestCase):
   log=root/"log"
   def fake(name, body):
    p=release/name; p.write_text("#!/bin/sh\n"+body); p.chmod(0o755)
-  fake("node-operator-release.sh",'echo "node:$1:$2:$AWS_PROFILE:${AWS_ACCESS_KEY_ID-unset}:$GITHUB_TOKEN" >> "$LOG"; [ "$1:$2" = "zero:prepare-artifacts" ] && mkdir -p "$8"; [ "${FAIL_NODE_PHASE:-}" = "$1:$2" ] && exit 7; exit 0')
+  fake("node-operator-release.sh",'echo "node:$1:$2:$*:$AWS_PROFILE:${AWS_ACCESS_KEY_ID-unset}:$GITHUB_TOKEN" >> "$LOG"; if [ "$1:$2" = "zero:prepare-artifacts" ]; then case " $* " in *" --include-publishers "*) ;; *) exit 77 ;; esac; mkdir -p "$8"; fi; [ "${FAIL_NODE_PHASE:-}" = "$1:$2" ] && exit 7; exit 0')
   inventory=release/"installer_artifact_inventory.py"; inventory.write_text('#!/usr/bin/env python3\nimport os,sys\nopen(os.environ["LOG"],"a").write("inventory:%s:%s:%s\\n"%(os.environ["AWS_PROFILE"],os.environ.get("AWS_ACCESS_KEY_ID","unset"),os.environ["GITHUB_TOKEN"]))\nsys.exit(int(os.environ.get("INV_FAIL","0")))\n'); inventory.chmod(0o755)
   fake("prepare-hoodi-zero-release-inputs.sh",'[ -z "${AWS_ACCESS_KEY_ID+x}${AWS_SECRET_ACCESS_KEY+x}${AWS_SESSION_TOKEN+x}${AWS_SECURITY_TOKEN+x}" ] || exit 91; for arg in "$@"; do [ -n "$arg" ] || exit 92; done; echo "prepare:$AWS_PROFILE:$GITHUB_TOKEN" >> "$LOG"; exit 23')
   mirror=release/"mirror-installer-vault-artifacts.py"; mirror.write_text('#!/usr/bin/env python3\nimport os,sys\nscope="non-vault" if "--scope" in sys.argv else "vault"\nstep=scope+":"+sys.argv[1]\nopen(os.environ["LOG"],"a").write("mirror:%s:%s\\n"%(step,os.environ["AWS_PROFILE"]))\nsys.exit(8 if os.environ.get("FAIL_MIRROR_COMMAND")==step else 0)\n'); mirror.chmod(0o755)

@@ -156,6 +156,12 @@ class ResumeWrapper(unittest.TestCase):
             "PLATFORM_LOG": str(d / "platform-log"),
             "DEPLOY_RC": rc,
             "AWS_ACCOUNT": account,
+            "DEFAULT_GITHUB_REPOSITORY": "example/operator",
+            "DEFAULT_GITHUB_OWNER_ID": "101",
+            "DEFAULT_GITHUB_REPOSITORY_ID": "102",
+            "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY": "example/gitops",
+            "DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID": "103",
+            "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID": "104",
             **extra,
         }
         if use_env:

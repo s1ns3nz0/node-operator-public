@@ -133,6 +133,12 @@ def run_tty(script: Path, fake_bin: Path, work: Path, input_text: str, **extra_e
         "INVENTORY_LOG": str(work / "inventory.log"),
         "PYTHON_LOG": str(work / "python-calls.log"),
         "SYSTEM_PYTHON": sys.executable,
+        "DEFAULT_GITHUB_REPOSITORY": "example/operator",
+        "DEFAULT_GITHUB_OWNER_ID": "101",
+        "DEFAULT_GITHUB_REPOSITORY_ID": "102",
+        "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY": "example/gitops",
+        "DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID": "103",
+        "DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID": "104",
         **extra_env,
     }
     process = subprocess.Popen([str(script)], stdin=slave, stdout=slave, stderr=slave, text=False, env=environment)

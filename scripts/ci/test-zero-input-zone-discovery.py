@@ -23,6 +23,8 @@ class ZoneDiscovery(unittest.TestCase):
                 "/bin/bash", str(ROOT / "scripts/release/prepare-zero-resource-inputs.sh"),
                 "--aws-account-id", "123456789012", "--aws-region", "ap-northeast-2",
                 "--backend-principal-arn", "arn:aws:iam::123456789012:role/test",
+                "--github-repository", "example/operator", "--github-owner-id", "101", "--github-repository-id", "102",
+                "--gitops-client-github-repository", "example/gitops", "--gitops-client-github-owner-id", "103", "--gitops-client-github-repository-id", "104",
                 "--output-dir", str(output),
             ], env={**os.environ, "PATH": str(base) + os.pathsep + os.environ["PATH"],
                     "ZONE_RESPONSE": response, "ZONE_RC": str(rc)},

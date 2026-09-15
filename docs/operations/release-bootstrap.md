@@ -15,14 +15,15 @@ approved. AWS credentials and the configured encrypted Terraform backend must
 come from the controlled execution environment. The release archive contains
 neither credentials nor backend state.
 
-The baseline creates private infrastructure and the GitOps artifact
-foundation; it does not treat an empty registry as a runnable node deployment.
-Before the client Application can reconcile, operators must publish the
-reviewed immutable private GitOps OCI artifacts and run the separately
-approved private Argo CD bootstrap phase. The release contract accepts only
-the `0.1.<run>` version format; promotion must verify and carry the exact
-immutable OCI digest before changing the Application. No historical chart
-revision is assumed to exist in a new account.
+The infrastructure entrypoint first creates the exact deployment-bound
+private ECR/KMS and publisher OIDC prerequisite closure, then mirrors and
+re-verifies every release-authorized immutable artifact before baseline
+infrastructure is applied. Operators do not separately publish artifacts for a
+fresh deployment. The separately approved private Argo CD bootstrap phase
+remains a distinct boundary. The release contract accepts only the `0.1.<run>`
+version format; promotion must verify and carry the exact immutable OCI digest
+before changing the Application. No historical chart revision is assumed to
+exist in a new account.
 
 SSM access, Vault initialization/unseal, Vault writes, validator key custody,
 remote-signer activation, and validator duties are deliberately not bootstrap
@@ -57,9 +58,10 @@ NAT inputs from the foundation output; a second VPC is not allowed. The work
 directory is a new mode-0700 directory and contains plan/state material, so
 retain it under controlled operator storage.
 
-This is infrastructure only. Immutable GitOps artifact publication, private
-Argo bootstrap, optional SSM access, Vault initialize/restore, custody, and
-validator activation stay separate approved operations.
+The command bootstraps and verifies the release-authorized immutable artifact
+set as part of infrastructure. Private Argo bootstrap, optional SSM access,
+Vault initialize/restore, custody, and validator activation stay separate
+approved operations.
 
 If the final validator identity and approved immutable client images are known
 at the beginning, generate both the zero-resource configuration and the
