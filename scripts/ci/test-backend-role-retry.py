@@ -38,7 +38,7 @@ class BackendRetryTest(unittest.TestCase):
             with self.subTest(mode=mode, explicit=explicit, foreign=foreign):
                 tags = {"Project": "node-operator", "Deployment": "foreign" if foreign else "test-node", "DeploymentRegion": "ap-northeast-2", "ManagedBy": "node-operator-installer"}
                 env = dict(os.environ, MODE=mode, DEFAULT_BACKEND_PRINCIPAL_ARN="arn:aws:iam::123456789012:role/external" if explicit else "", ROLE_TAGS=json.dumps({"Tags": [{"Key": k, "Value": v} for k, v in tags.items()]}))
-                result = subprocess.run(["bash", "-eu", "-c", MOCK + BLOCK + '\nprintf "%s" "$backend_role_managed"'], env=env, input="CREATE\n", text=True, capture_output=True)
+                result = subprocess.run(["bash", "-eu", "-c", MOCK + BLOCK + '\nprintf "%s" "$backend_role_managed"'], env=env, text=True, capture_output=True)
                 self.assertEqual(result.returncode, 65 if expected is None else 0, result.stderr)
                 if expected is not None:
                     self.assertEqual(result.stdout, expected)

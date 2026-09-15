@@ -20,12 +20,11 @@ print_startup_guidance() {
   printf '%bInstaller startup guidance%b\n' "$heading" "$reset" >&2
   printf '%s\n' '  1. Ordinary installation' >&2
   printf '%s\n' '     Sign in to the intended AWS account with permissions for the selected deployment. Self-hosted CI or release-runner setup is not required for a downloaded-bundle install.' >&2
-  printf '%s\n' '  2. Non-secret configuration only' >&2
-  printf '%s\n' '     Use exactly one: .env or release/env at the checkout root, or env at an extracted bundle root. See release/env.example in the source tree for accepted fields and defaults.' >&2
-  printf '%s\n' '     REGION and DEPLOYMENT_NAME are non-secret. Custom GitHub trust requires GITHUB_REPOSITORY=owner/repository plus numeric GITHUB_OWNER_ID and GITHUB_REPOSITORY_ID together.' >&2
-  printf '%s\n' '     Never paste or store AWS credentials, GitHub tokens, Vault tokens, private keys, passwords, recovery material, or other secrets in configuration.' >&2
+  printf '%s\n' '  2. Derived deployment context' >&2
+  printf '%s\n' '     No flags or environment file are required. The installer derives the AWS profile/Region/account from AWS CLI and exact GitHub repository IDs from gh CLI plus git origin.' >&2
+  printf '%s\n' '     It generates a bounded deployment name and uses only release-authorized immutable artifacts. Do not provide credentials, tokens, private keys, passwords, or recovery material to this command.' >&2
   printf '%s\n' '  3. Key and Vault ceremony boundaries' >&2
-  printf '%s\n' '     Keep custody files in your selected private directory. Secret onboarding into Vault occurs only at the later ceremony. Enter a keystore password only at its designated hidden ceremony prompt, never at startup, in .env, or in logs.' >&2
+  printf '%s\n' '     Keep custody files in your selected private directory. Secret onboarding into Vault occurs only at the later ceremony. Enter a keystore password only at its designated hidden ceremony prompt, never at startup or in logs.' >&2
   printf '%s\n' '     Vault initialization is later and acknowledged. It produces recovery material only then; its selected share count and threshold are explained then, never generated automatically at startup.' >&2
   printf '%s\n' '  4. Optional self-hosted CI/release administration' >&2
   printf '%s\n' '     For a private CodeBuild runner, manually authorize the CodeConnections GitHub App in the AWS console (Developer Tools > Settings > Connections). The repository-scoped connection status must read AVAILABLE.' >&2
@@ -65,26 +64,9 @@ if [ ! -f "$repo_root/bundle-manifest.json" ] && [ -f "$repo_root/scripts/ci/bui
   printf '%s\n' 'No verified bundle detected; building and validating a local release bundle.' >&2
   "$repo_root/scripts/ci/build-release-bundle.sh" "$bundle_output"
   tar -xf "$bundle_output/node-operator-release-bundle.tar" -C "$bundle_root"
-  # The local operator configuration is intentionally outside the release
-  # archive.  Accept one explicit conventional location, never merge files:
-  # a merge would silently change a deployment's authority.  Preserve the
-  # selected filename in the bundle so the wrapper can report provenance.
-  local_env_candidates=("$repo_root/.env" "$repo_root/release/env")
-  local_env_files=()
-  for local_env_candidate in "${local_env_candidates[@]}"; do
-    if [ -e "$local_env_candidate" ] || [ -L "$local_env_candidate" ]; then
-      [ -f "$local_env_candidate" ] && [ ! -L "$local_env_candidate" ] || { printf '%s\n' 'local configuration must be a regular non-symlink file' >&2; exit 65; }
-      local_env_files+=("$local_env_candidate")
-    fi
-  done
-  if [ "${#local_env_files[@]}" -gt 1 ]; then
-    printf '%s\n' 'multiple local configuration files found (.env and release/env); keep exactly one' >&2
-    exit 65
-  fi
-  if [ "${#local_env_files[@]}" -eq 1 ]; then
-    install -m 600 "${local_env_files[0]}" "$bundle_root/env"
-  fi
-  NODE_OPERATOR_SOURCE_REPOSITORY_ROOT="$repo_root" NODE_OPERATOR_CONFIG_SOURCE_PATH="${local_env_files[0]:-}" "$bundle_root/source/scripts/release/interactive-hoodi-release.sh"
+  # The interactive entrypoint derives its non-secret context from AWS CLI,
+  # gh CLI, and the git remote. It never copies or loads an environment file.
+  NODE_OPERATOR_SOURCE_REPOSITORY_ROOT="$repo_root" "$bundle_root/source/scripts/release/interactive-hoodi-release.sh"
   exit $?
 fi
 

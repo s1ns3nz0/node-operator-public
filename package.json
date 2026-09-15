@@ -59,6 +59,7 @@
     "test:apply-argocd-bootstrap-contract": "bash scripts/ci/test-apply-argocd-bootstrap-contract.sh",
     "test:revoke-argocd-bootstrap-contract": "bash scripts/ci/test-revoke-argocd-bootstrap-contract.sh",
     "test:prepare-hoodi-validator-deployment-contract": "bash scripts/ci/test-prepare-hoodi-validator-deployment-contract.sh",
+    "test:interactive-hoodi-defaults": "bash scripts/ci/test-interactive-hoodi-defaults.sh",
     "test:ops-access-credential-boundary": "bash scripts/ci/test-ops-access-credential-boundary.sh"
   }
 }

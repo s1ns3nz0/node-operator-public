@@ -5,6 +5,7 @@ import errno, hashlib, json, os, pathlib, pty, select, shutil, signal, subproces
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / "scripts/release/interactive-hoodi-release.sh"
 HELPER = ROOT / "scripts/release/interactive-hoodi-resume.py"
+DEFAULTS_HELPER = ROOT / "scripts/release/interactive-hoodi-defaults.sh"
 ACCOUNT, REGION, DEPLOYMENT = "123456789012", "ap-northeast-2", "node-op-123"
 
 
@@ -36,6 +37,7 @@ class ResumeWrapper(unittest.TestCase):
         for src, name in (
             (WRAPPER, "interactive-hoodi-release.sh"),
             (HELPER, "interactive-hoodi-resume.py"),
+            (DEFAULTS_HELPER, "interactive-hoodi-defaults.sh"),
         ):
             target = rel / name
             shutil.copy(src, target)
@@ -139,8 +141,14 @@ class ResumeWrapper(unittest.TestCase):
         fake = d / "bin"
         fake.mkdir()
         aws = fake / "aws"
-        aws.write_text('#!/usr/bin/env bash\ncase "$1:$2" in sts:get-caller-identity) printf \'{"Account":"%s"}\\n\' "${AWS_ACCOUNT:-123456789012}" ;; ecr:describe-images) for x in "$@"; do case "$x" in imageDigest=*) echo "${x#imageDigest=}"; exit;; imageTag=*) echo "sha256:' + "7" * 64 + '"; exit;; esac; done;; *) exit 88;; esac\n')
+        aws.write_text('#!/usr/bin/env bash\ncase "$1:$2" in configure:get) echo ap-northeast-2 ;; sts:get-caller-identity) printf \'{"Account":"%s","Arn":"arn:aws:iam::%s:user/operator"}\\n\' "${AWS_ACCOUNT:-123456789012}" "${AWS_ACCOUNT:-123456789012}" ;; ecr:describe-images) for x in "$@"; do case "$x" in imageDigest=*) echo "${x#imageDigest=}"; exit;; imageTag=*) echo "sha256:' + "7" * 64 + '"; exit;; esac; done;; *) exit 88;; esac\n')
         aws.chmod(0o755)
+        gh = fake / "gh"
+        gh.write_text('#!/usr/bin/env bash\nprintf "example/node-operator\\t101\\t102\\n"\n')
+        gh.chmod(0o755)
+        git = fake / "git"
+        git.write_text('#!/usr/bin/env bash\nprintf "%s\\n" https://github.com/example/node-operator.git\n')
+        git.chmod(0o755)
         for name in ("helm", "ruby"):
             command = fake / name
             command.write_text("#!/usr/bin/env bash\nexit 99\n")
@@ -314,56 +322,23 @@ class ResumeWrapper(unittest.TestCase):
         self.assertIn("paths are unavailable or unsafe", out)
         self.assertFalse((d / "log").exists())
 
-    def test_existing_lock_and_env_file_selector(self):
+    def test_existing_lock_blocks_resume(self):
         d, w, b = self.fixture()
         (w / ".interactive-resume.lock").mkdir()
         rc, out = self.invoke(d, w, b)
         self.assertEqual(rc, 75)
         self.assertIn("holds the WORK_DIR lock", out)
-        (w / ".interactive-resume.lock").rmdir()
-        env_dir = d / "release"
-        env_dir.mkdir()
-        (env_dir / "env").write_text("WORK_DIR=" + str(w) + "\n")
-        rc, out = self.invoke(d, w, b, use_env=False)
-        self.assertEqual(rc, 0)
-        self.assertIn("platform-only recovery completed", out)
 
-    def test_root_dotenv_relative_path_and_safe_literal_expansion(self):
+    def test_environment_files_cannot_select_a_resume(self):
+        source = WRAPPER.read_text()
+        self.assertIn("env_file=''", source)
+        self.assertNotIn('env_candidates=("$bundle_root/env"', source)
+
+    def test_failure_log_redacts_ambient_credentials(self):
         d, w, b = self.fixture()
-        rc, _ = self.invoke(d, w, b)
-        self.assertEqual(rc, 0)
-        (d / ".env").write_text("WORK_DIR=work\nEXISTING_KEYSTORE_DIR=~/keys\n")
-        rc, out = self.invoke(d, w, b, use_env=False)
-        self.assertEqual(rc, 0, out)
-        self.assertIn("Using non-secret configuration:", out)
-        self.assertIn(".env", out)
-        self.assertIn("platform-only recovery was already complete", out)
-
-        sentinel = d / "executed"
-        (d / ".env").write_text(f"WORK_DIR=$(touch {sentinel})\n")
-        rc, out = self.invoke(d, w, b, use_env=False)
-        self.assertEqual(rc, 65)
-        self.assertIn("WORK_DIR is unavailable or unsafe", out)
-        self.assertFalse(sentinel.exists())
-
-    def test_config_conflict_symlink_and_failure_log_redaction(self):
-        d, w, b = self.fixture()
-        (d / ".env").write_text("WORK_DIR=work\n")
-        (d / "release").mkdir()
-        (d / "release/env").write_text("WORK_DIR=work\n")
-        rc, out = self.invoke(d, w, b, use_env=False)
-        self.assertEqual(rc, 65)
-        self.assertIn("multiple configuration files", out)
-        (d / "release/env").unlink()
-        (d / ".env").unlink()
-        (d / ".env").symlink_to(d / "release/env")
-        rc, out = self.invoke(d, w, b, use_env=False)
-        self.assertEqual(rc, 65)
-        self.assertIn("regular non-symlink", out)
-        (d / ".env").unlink()
-
-        rc, _ = self.invoke(d, w, b, rc="9", AWS_SECRET_ACCESS_KEY="sensitive-sentinel")
+        rc, out = self.invoke(d, w, b, rc="9", AWS_SECRET_ACCESS_KEY="sensitive-sentinel")
         self.assertEqual(rc, 9)
+        self.assertNotIn("sensitive-sentinel", out)
         logs = list((w / "diagnostics").glob("installer-*"))
         self.assertTrue(logs)
         log = logs[-1].read_text()

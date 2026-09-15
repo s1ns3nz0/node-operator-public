@@ -5,6 +5,14 @@ umask 077
 # Drives only non-secret release boundaries from the single preparation
 # handoff. Vault recovery, custody, GitOps publication, and activation remain
 # separate ceremonies and cannot be smuggled through this entrypoint.
+#
+# AWS authentication: this command reads the selected AWS CLI profile (or the
+# default credential chain); it never accepts, writes, or prints credentials.
+# Before a temporary verification deployment, authenticate the CLI with an
+# operator-controlled principal that can create the scoped Terraform backend,
+# KMS, S3, ECR, IAM/OIDC, EKS, EC2/VPC, and CloudWatch resources in the target
+# account. Use a dedicated role/profile with a documented teardown path, not
+# access keys committed to source or passed on this command line.
 usage() {
   cat >&2 <<'USAGE'
 usage:

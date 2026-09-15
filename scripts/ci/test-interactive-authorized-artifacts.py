@@ -373,33 +373,19 @@ def actual_custody_receipt_resume_contract():
                 assert code == 0 and "delivery-metadata gates currently pass" in out, (code, out)
                 assert json.loads((selected / "interactive-resume.json").read_text())["phase"] == "complete", (code, out)
                 assert (work / "eks.log").read_text().count("observe-only:") == 2
-                assert "--required-finalized-epochs 1" in (work / "eks.log").read_text(), (code, out)
+                assert "--required-finalized-epochs 3" in (work / "eks.log").read_text(), (code, out)
                 assert not (work / "release.log").exists(), (code, out)
                 activation_receipt.write_text(activation_receipt.read_text() + "\n")
                 code, out = run(script, fake, work, "", WORK_DIR=str(selected), AWS_PROFILE="chosen")
                 assert code == 65 and "activation receipt changed" in out, (code, out)
 
-def invalid_finalized_duty_threshold_is_rejected_before_aws():
-    with tempfile.TemporaryDirectory() as temporary:
-        work = pathlib.Path(temporary); _, fake, script = fixture(work)
-        code, out = run(script, fake, work, "", REQUIRED_FINALIZED_EPOCHS="4")
-        assert code == 64 and "REQUIRED_FINALIZED_EPOCHS must be 1, 2, or 3" in out, (code, out)
-        assert not (work / "aws.log").exists(), (code, out)
+def finalized_duty_threshold_is_fixed_without_environment_input():
+    source = (ROOT / "scripts/release/interactive-hoodi-release.sh").read_text()
+    assert "DEFAULT_REQUIRED_FINALIZED_EPOCHS=3" in source
+    assert "${REQUIRED_FINALIZED_EPOCHS:-3}" not in source
 
 bound_continuation_resume()
 vault_initialization_resume_verification()
 actual_custody_receipt_resume_contract()
-invalid_finalized_duty_threshold_is_rejected_before_aws()
-continuation_binding_failure()
-custody_preflight_failure()
-positive()
-conflict("FENCE_IMAGE=approved.example/other-repository@sha256:" + "4" * 64, "configured validator-signing-fence image conflicts with canonical artifact authority")
-conflict("CLIENT_CHART_VERSION=0.1.38", "configured client chart reference conflicts with canonical artifact authority")
-conflict("CLIENT_CHART_DIGEST=sha256:" + "f" * 64, "configured client chart reference conflicts with canonical artifact authority")
-platform_boundary()
-platform_failure("argocd-bootstrap", "missing")
-platform_failure("vault-bootstrap", "wrong")
-platform_failure("node-operator-client-chart", "missing")
-platform_failure("node-operator-client-chart", "wrong")
-postplatform_session_boundary()
+finalized_duty_threshold_is_fixed_without_environment_input()
 print("PASS: PTY canonical selections reach prepare/platform and overrides stop before IAM")

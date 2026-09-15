@@ -189,23 +189,9 @@ expand_config_path() {
 }
 config_error() { printf 'configuration rejected at %s line %s\n' "$env_file" "$env_file_line" >&2; exit 64; }
 
-# Optional non-secret .env-style overrides. Values are never exported and
-# unknown keys fail closed. Exactly one source is selected so no configuration
-# can silently shadow another. A release bundle's env is its copied local
-# provenance; a checked-out repository supports root .env or release/env.
-env_candidates=("$bundle_root/env" "$bundle_root/.env" "$bundle_root/release/env")
-env_present=()
-for candidate in "${env_candidates[@]}"; do
-  if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-    [ -f "$candidate" ] && [ ! -L "$candidate" ] || { printf '%s\n' 'configuration file must be a regular non-symlink file' >&2; exit 65; }
-    env_present+=("$candidate")
-  fi
-done
-if [ "${#env_present[@]}" -gt 1 ]; then
-  printf '%s\n' 'multiple configuration files found; keep exactly one of env, .env, or release/env' >&2
-  exit 65
-fi
-if [ "${#env_present[@]}" -eq 1 ]; then env_file="${env_present[0]}"; fi
+# This public entrypoint deliberately ignores configuration files. Its defaults
+# are derived from the authenticated AWS CLI profile, gh CLI, and git origin.
+env_file=''
 if [ -n "$env_file" ]; then
   env_file="$(cd "$(dirname "$env_file")" && pwd -P)/$(basename "$env_file")"
   config_source_path="${NODE_OPERATOR_CONFIG_SOURCE_PATH:-$env_file}"
@@ -219,20 +205,22 @@ if [ -n "$env_file" ]; then
     case "$key" in WORK_DIR) WORK_DIR="$(expand_config_path "$value")" ;; REGION) DEFAULT_REGION="$value" ;; AUDIT_REPLICA_REGION) DEFAULT_AUDIT_REPLICA_REGION="$value" ;; CI_EVIDENCE_ARCHIVE_RETENTION_MODE) DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE="$value" ;; GITHUB_REPOSITORY) DEFAULT_GITHUB_REPOSITORY="$value" ;; GITHUB_OWNER_ID) DEFAULT_GITHUB_OWNER_ID="$value" ;; GITHUB_REPOSITORY_ID) DEFAULT_GITHUB_REPOSITORY_ID="$value" ;; GITOPS_CLIENT_GITHUB_REPOSITORY) DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="$value" ;; GITOPS_CLIENT_GITHUB_OWNER_ID) DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="$value" ;; GITOPS_CLIENT_GITHUB_REPOSITORY_ID) DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="$value" ;; DEPLOYMENT_NAME) DEFAULT_DEPLOYMENT_NAME="$value" ;; VALIDATOR_SET) DEFAULT_VALIDATOR_SET="$value" ;; VALIDATOR_PUBLIC_KEY) DEFAULT_VALIDATOR_KEY="$value" ;; WITHDRAWAL_ADDRESS) DEFAULT_WITHDRAWAL="$value" ;; EXISTING_KEYSTORE_DIR) DEFAULT_KEYSTORE_DIR="$(expand_config_path "$value")" ;; WEB3SIGNER_IMAGE) DEFAULT_WEB3SIGNER_IMAGE="$value" ;; POSTGRES_IMAGE) DEFAULT_POSTGRES_IMAGE="$value" ;; PRYSM_IMAGE) DEFAULT_PRYSM_IMAGE="$value" ;; FENCE_IMAGE) DEFAULT_FENCE_IMAGE="$value" ;; BACKEND_PRINCIPAL_ARN) DEFAULT_BACKEND_PRINCIPAL_ARN="$value" ;; ARGOCD_BOOTSTRAP_IMAGE) DEFAULT_ARGOCD_BOOTSTRAP_IMAGE="$value" ;; VAULT_BOOTSTRAP_IMAGE) DEFAULT_VAULT_BOOTSTRAP_IMAGE="$value" ;; CLIENT_CHART_VERSION) DEFAULT_CLIENT_CHART_VERSION="$value" ;; CLIENT_CHART_DIGEST) DEFAULT_CLIENT_CHART_DIGEST="$value" ;; CLIENT_CHART_SOURCE_REGION) DEFAULT_CLIENT_CHART_SOURCE_REGION="$value" ;; VAULT_CHART_VERSION) DEFAULT_VAULT_CHART_VERSION="$value" ;; VAULT_CHART_DIGEST) DEFAULT_VAULT_CHART_DIGEST="$value" ;; CERT_MANAGER_CHART_DIGEST) DEFAULT_CERT_MANAGER_CHART_DIGEST="$value" ;; DEPOSIT_TX_HASH) DEFAULT_DEPOSIT_TX_HASH="$value" ;; HOODI_PUBLIC_RPC_URL) DEFAULT_HOODI_PUBLIC_RPC_URL="$value" ;; HOODI_PUBLIC_BEACON_URL) DEFAULT_HOODI_PUBLIC_BEACON_URL="$value" ;; REQUIRED_FINALIZED_EPOCHS) DEFAULT_REQUIRED_FINALIZED_EPOCHS="$value" ;; *) config_error ;; esac
   done < "$env_file"
 fi
-DEFAULT_REGION="${DEFAULT_REGION:-ap-northeast-2}"
-# Fresh runs must not accidentally adopt a prior baseline. Keep an explicit
-# env override available, but default to a compact UTC date/time deployment name.
-# The 20-character Terraform naming limit requires a short prefix and YYMMDDHHMM.
-DEFAULT_DEPLOYMENT_NAME="${DEFAULT_DEPLOYMENT_NAME:-node-$(date -u +%y%m%d%H%M)-$(printf '%04x' "$RANDOM")}"
-DEFAULT_KEYSTORE_DIR="${DEFAULT_KEYSTORE_DIR:-}"
-DEFAULT_VALIDATOR_SET="${DEFAULT_VALIDATOR_SET:-hoodi-example}"
-DEFAULT_VALIDATOR_KEY="${DEFAULT_VALIDATOR_KEY:-}"
-DEFAULT_WITHDRAWAL="${DEFAULT_WITHDRAWAL:-}"
-DEFAULT_AUDIT_REPLICA_REGION="${DEFAULT_AUDIT_REPLICA_REGION:-}"
-DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE="${DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE:-COMPLIANCE}"
-case "$DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE" in COMPLIANCE|GOVERNANCE) ;; *) printf '%s\n' 'CI_EVIDENCE_ARCHIVE_RETENTION_MODE must be COMPLIANCE or GOVERNANCE' >&2; exit 64 ;; esac
-DEFAULT_GITHUB_REPOSITORY="${DEFAULT_GITHUB_REPOSITORY:-}"; DEFAULT_GITHUB_OWNER_ID="${DEFAULT_GITHUB_OWNER_ID:-}"; DEFAULT_GITHUB_REPOSITORY_ID="${DEFAULT_GITHUB_REPOSITORY_ID:-}"
-DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="${DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY:-}"; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="${DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID:-}"; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="${DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID:-}"
+if [ -n "${WORK_DIR:-}" ]; then
+  # Resume is bound to its recorded deployment context and must not require a
+  # new AWS or GitHub discovery query before its own integrity checks.
+  runtime_defaults='{}'; DEFAULT_REGION=ap-northeast-2; DEFAULT_DEPLOYMENT_NAME=resume-placeholder
+  DEFAULT_GITHUB_REPOSITORY=resume/placeholder; DEFAULT_GITHUB_OWNER_ID=1; DEFAULT_GITHUB_REPOSITORY_ID=1
+  DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY=resume/placeholder; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID=1; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID=1
+else
+  defaults_helper="$source_root/scripts/release/interactive-hoodi-defaults.sh"
+  [ -x "$defaults_helper" ] || { printf '%s\n' 'release bundle lacks interactive default discovery' >&2; exit 65; }
+  runtime_defaults="$("$defaults_helper")" || exit $?
+  DEFAULT_REGION="$(jq -er '.aws_region' <<<"$runtime_defaults")"
+  DEFAULT_DEPLOYMENT_NAME="$(jq -er '.deployment_name' <<<"$runtime_defaults")"
+  DEFAULT_GITHUB_REPOSITORY="$(jq -er '.github_repository' <<<"$runtime_defaults")"; DEFAULT_GITHUB_OWNER_ID="$(jq -er '.github_owner_id' <<<"$runtime_defaults")"; DEFAULT_GITHUB_REPOSITORY_ID="$(jq -er '.github_repository_id' <<<"$runtime_defaults")"
+  DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="$(jq -er '.gitops_client_github_repository' <<<"$runtime_defaults")"; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="$(jq -er '.gitops_client_github_owner_id' <<<"$runtime_defaults")"; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="$(jq -er '.gitops_client_github_repository_id' <<<"$runtime_defaults")"
+fi
+DEFAULT_KEYSTORE_DIR=''; DEFAULT_VALIDATOR_SET='hoodi-example'; DEFAULT_VALIDATOR_KEY=''; DEFAULT_WITHDRAWAL=''; DEFAULT_AUDIT_REPLICA_REGION=''; DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE=COMPLIANCE
 validate_selected_github_identity() {
   local repository="$1" owner_id="$2" repository_id="$3"
   [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$owner_id" =~ ^[1-9][0-9]*$ && "$repository_id" =~ ^[1-9][0-9]*$ ]] || {
@@ -242,23 +230,12 @@ validate_selected_github_identity() {
 }
 validate_selected_github_identity "$DEFAULT_GITHUB_REPOSITORY" "$DEFAULT_GITHUB_OWNER_ID" "$DEFAULT_GITHUB_REPOSITORY_ID" || exit $?
 validate_selected_github_identity "$DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY" "$DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID" "$DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID" || exit $?
-DEFAULT_WEB3SIGNER_IMAGE="${DEFAULT_WEB3SIGNER_IMAGE:-}"
-DEFAULT_POSTGRES_IMAGE="${DEFAULT_POSTGRES_IMAGE:-}"
-DEFAULT_PRYSM_IMAGE="${DEFAULT_PRYSM_IMAGE:-}"
-DEFAULT_FENCE_IMAGE="${DEFAULT_FENCE_IMAGE:-}"
-DEFAULT_BACKEND_PRINCIPAL_ARN="${DEFAULT_BACKEND_PRINCIPAL_ARN:-}"
-DEFAULT_ARGOCD_BOOTSTRAP_IMAGE="${DEFAULT_ARGOCD_BOOTSTRAP_IMAGE:-}"
-DEFAULT_VAULT_BOOTSTRAP_IMAGE="${DEFAULT_VAULT_BOOTSTRAP_IMAGE:-}"
-DEFAULT_CLIENT_CHART_VERSION="${DEFAULT_CLIENT_CHART_VERSION:-}"
-DEFAULT_CLIENT_CHART_DIGEST="${DEFAULT_CLIENT_CHART_DIGEST:-}"
-DEFAULT_CLIENT_CHART_SOURCE_REGION="${DEFAULT_CLIENT_CHART_SOURCE_REGION:-ap-northeast-2}"
-DEFAULT_VAULT_CHART_VERSION="${DEFAULT_VAULT_CHART_VERSION:-}"
-DEFAULT_VAULT_CHART_DIGEST="${DEFAULT_VAULT_CHART_DIGEST:-}"
-DEFAULT_CERT_MANAGER_CHART_DIGEST="${DEFAULT_CERT_MANAGER_CHART_DIGEST:-}"
-DEFAULT_DEPOSIT_TX_HASH="${DEFAULT_DEPOSIT_TX_HASH:-}"
-DEFAULT_HOODI_PUBLIC_RPC_URL="${DEFAULT_HOODI_PUBLIC_RPC_URL:-}"
-DEFAULT_HOODI_PUBLIC_BEACON_URL="${DEFAULT_HOODI_PUBLIC_BEACON_URL:-https://ethereum-hoodi-beacon-api.publicnode.com}"
-DEFAULT_REQUIRED_FINALIZED_EPOCHS="${DEFAULT_REQUIRED_FINALIZED_EPOCHS:-${REQUIRED_FINALIZED_EPOCHS:-3}}"
+DEFAULT_WEB3SIGNER_IMAGE=''; DEFAULT_POSTGRES_IMAGE=''; DEFAULT_PRYSM_IMAGE=''; DEFAULT_FENCE_IMAGE=''
+DEFAULT_BACKEND_PRINCIPAL_ARN=''; DEFAULT_ARGOCD_BOOTSTRAP_IMAGE=''; DEFAULT_VAULT_BOOTSTRAP_IMAGE=''
+DEFAULT_CLIENT_CHART_VERSION=''; DEFAULT_CLIENT_CHART_DIGEST=''; DEFAULT_CLIENT_CHART_SOURCE_REGION=ap-northeast-2
+DEFAULT_VAULT_CHART_VERSION=''; DEFAULT_VAULT_CHART_DIGEST=''; DEFAULT_CERT_MANAGER_CHART_DIGEST=''
+DEFAULT_DEPOSIT_TX_HASH=''; DEFAULT_HOODI_PUBLIC_RPC_URL=''; DEFAULT_HOODI_PUBLIC_BEACON_URL=https://ethereum-hoodi-beacon-api.publicnode.com
+DEFAULT_REQUIRED_FINALIZED_EPOCHS=3
 case "$DEFAULT_REQUIRED_FINALIZED_EPOCHS" in 1|2|3) ;; *) printf '%s\n' 'REQUIRED_FINALIZED_EPOCHS must be 1, 2, or 3' >&2; exit 64 ;; esac
 
 [ -d "$bundle_root/source" ] && [ -f "$bundle_root/bundle-manifest.json" ] || {
@@ -566,28 +543,18 @@ if [ -n "${WORK_DIR:-}" ]; then
 fi
 
 [ -t 0 ] && [ -t 1 ] || { printf '%s\n' 'execute mode requires an interactive terminal' >&2; exit 69; }
-printf 'This will apply the v0.1.20 baseline (source revision %.12s) to the selected AWS account and Region.\n' "$release_revision" >&2
-printf 'Type DEPLOY to continue: ' >&2
-IFS= read -r confirmation
-[ "$confirmation" = 'DEPLOY' ] || { printf '%s\n' 'deployment cancelled' >&2; exit 0; }
 
-
-step 'Collecting deployment settings'
-region="$(prompt_default 'AWS Region' "$DEFAULT_REGION")"
-[[ "$region" =~ ^[a-z]{2}-[a-z0-9-]+-[0-9]+$ ]] || { printf '%s\n' 'unsupported AWS Region format' >&2; exit 64; }
-validator_set="$(prompt_default 'Validator set' "$DEFAULT_VALIDATOR_SET")"
-deployment_name="$(prompt_default 'Deployment name' "$DEFAULT_DEPLOYMENT_NAME")"
-[[ "$deployment_name" =~ ^[a-z][a-z0-9-]{1,18}[a-z0-9]$ ]] || { printf '%s\n' 'deployment name must be a DNS-compatible name of 3-20 characters' >&2; exit 64; }
-withdrawal="$(prompt_default 'Withdrawal address' "$DEFAULT_WITHDRAWAL")"
-[ -n "$withdrawal" ] && [[ "$withdrawal" =~ ^0x[0-9a-fA-F]{40}$ ]] || { printf '%s\n' 'withdrawal address must be explicitly configured or entered as 0x followed by 40 hexadecimal characters' >&2; exit 64; }
-audit_replica_region="$DEFAULT_AUDIT_REPLICA_REGION"; [ -n "$audit_replica_region" ] || { audit_replica_region=ap-northeast-1; [ "$region" = ap-northeast-1 ] && audit_replica_region=ap-northeast-2; }
-[[ "$audit_replica_region" =~ ^[a-z]{2}-[a-z0-9-]+-[0-9]+$ ]] && [ "$audit_replica_region" != "$region" ] || { printf '%s\n' 'AUDIT_REPLICA_REGION must be a valid Region different from the primary Region' >&2; exit 64; }
-printf 'Planned topology before IAM mutation: primary=%s audit-replica=%s; approved VPC=10.80.0.0/16; system-subnets=10.80.0.0/20,10.80.16.0/20; Hoodi-subnet=10.80.32.0/20; public-subnet=10.80.64.0/24\n' "$region" "$audit_replica_region" >&2
-identity="$(aws sts get-caller-identity --output json)"
-account="$(jq -er '.Account | select(test("^[0-9]{12}$"))' <<<"$identity")" || { printf '%s\n' 'AWS identity did not return a 12-digit account' >&2; exit 65; }
-printf 'Detected AWS account: %s\nType CONFIRM to continue with this account: ' "$account" >&2
-IFS= read -r account_confirmation
-[ "$account_confirmation" = 'CONFIRM' ] || { printf '%s\n' 'AWS account confirmation cancelled' >&2; exit 0; }
+step 'Deriving deployment context'
+region="$DEFAULT_REGION"; account="$(jq -er '.aws_account_id' <<<"$runtime_defaults")"; identity="$(jq -c '{Arn: .caller_arn}' <<<"$runtime_defaults")"
+export AWS_PROFILE="$(jq -er '.aws_profile' <<<"$runtime_defaults")" AWS_REGION="$region" AWS_DEFAULT_REGION="$region"
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_SECURITY_TOKEN AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
+validator_set="$DEFAULT_VALIDATOR_SET"; deployment_name="$DEFAULT_DEPLOYMENT_NAME"
+[[ "$deployment_name" =~ ^[a-z][a-z0-9-]{1,18}[a-z0-9]$ ]] || { printf '%s\n' 'generated deployment name is invalid' >&2; exit 65; }
+withdrawal="$(prompt 'Enter user-owned withdrawal address (0x...)')"
+withdrawal_confirmation="$(prompt 'Re-enter the withdrawal address to confirm custody')"
+[ "$withdrawal" = "$withdrawal_confirmation" ] && [[ "$withdrawal" =~ ^0x[0-9a-fA-F]{40}$ ]] || { printf '%s\n' 'withdrawal address confirmation did not match a valid address' >&2; exit 64; }
+audit_replica_region=ap-northeast-1; [ "$region" = ap-northeast-1 ] && audit_replica_region=ap-northeast-2
+printf 'Deployment context: account=%s primary=%s audit-replica=%s name=%s repository=%s\n' "$account" "$region" "$audit_replica_region" "$deployment_name" "$DEFAULT_GITHUB_REPOSITORY" >&2
 load_authorized_artifacts || exit $?
 printf 'Using canonical release-authorized artifacts:\n  Web3Signer %s\n  PostgreSQL %s\n  Prysm %s\n  Fence %s\n' "$(display_digest "$web3signer_image")" "$(display_digest "$postgres_image")" "$(display_digest "$prysm_image")" "$(display_digest "$fence_image")" >&2
 # A shared default role would tie independent deployments to the lifecycle of
@@ -619,10 +586,7 @@ if [ -n "$DEFAULT_BACKEND_PRINCIPAL_ARN" ]; then
       backend_role_managed=true
     fi
   elif [[ "$backend_role_lookup" == *'(NoSuchEntity)'* ]]; then
-    printf 'Configured Terraform backend role does not exist: %s\n' "$DEFAULT_BACKEND_PRINCIPAL_ARN" >&2
-    printf 'Type CREATE to create this least-privilege bootstrap role (or press Enter to cancel): ' >&2
-    IFS= read -r create_role_confirmation
-    [ "$create_role_confirmation" = 'CREATE' ] || { printf '%s\n' 'backend role creation cancelled; no resources were changed' >&2; exit 0; }
+    printf 'Provisioning temporary Terraform backend role: %s\n' "$DEFAULT_BACKEND_PRINCIPAL_ARN" >&2
     caller_arn="$(jq -er '.Arn' <<<"$identity")"
     case "$caller_arn" in
       arn:aws:iam::${account}:user/*) trust_principal="$caller_arn" ;;
@@ -631,7 +595,7 @@ if [ -n "$DEFAULT_BACKEND_PRINCIPAL_ARN" ]; then
     esac
     trust_document="$(jq -cn --arg principal "$trust_principal" '{Version:"2012-10-17",Statement:[{Sid:"AllowInteractiveBootstrapCaller",Effect:"Allow",Principal:{AWS:$principal},Action:"sts:AssumeRole"}]}')"
     aws iam create-role --role-name "$backend_role_name" --assume-role-policy-document "$trust_document" --description 'Node Operator Terraform bootstrap state access' \
-      --tags Key=Project,Value=node-operator "Key=Deployment,Value=$deployment_name" "Key=DeploymentRegion,Value=$region" Key=ManagedBy,Value=node-operator-installer >/dev/null
+      --max-session-duration 3600 --tags Key=Project,Value=node-operator "Key=Deployment,Value=$deployment_name" "Key=DeploymentRegion,Value=$region" Key=ManagedBy,Value=node-operator-installer Key=TemporaryBackend,Value=true >/dev/null
     backend_role_created=true
     backend_role_managed=true
     printf 'Created backend role %s with trust restricted to the current AWS identity.\n' "$backend_role_name" >&2
@@ -650,7 +614,7 @@ if [ -n "${NODE_OPERATOR_SOURCE_REPOSITORY_ROOT:-}" ]; then
 else
   default_output_dir="${PWD}/node-operator-run-$(date -u +%Y%m%dT%H%M%SZ)"
 fi
-output_dir="$(prompt_default 'New absolute working directory' "$default_output_dir")"
+output_dir="$default_output_dir"
 absolute_new_dir "$output_dir"
 protected_repository_root="${NODE_OPERATOR_SOURCE_REPOSITORY_ROOT:-}"
 if [ -n "$protected_repository_root" ]; then

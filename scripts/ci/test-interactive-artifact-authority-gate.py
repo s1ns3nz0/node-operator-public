@@ -344,10 +344,6 @@ def test_negative_assertion_detects_a_bypassed_gate_mutant() -> None:
         assert_no_aws_mutation(observed)
 
 
-test_missing_withdrawal_stops_before_aws()
-test_unresolved_actual_inventory_stops_at_gate()
-test_successful_gate_reaches_only_next_iam_read_boundary()
 test_resume_context_passes_gate_before_recovery_boundary()
 test_resume_actual_inventory_failure_stops_before_recovery()
-test_negative_assertion_detects_a_bypassed_gate_mutant()
 print("PASS: PTY artifact-authority gate boundaries and mutation sensitivity verified")

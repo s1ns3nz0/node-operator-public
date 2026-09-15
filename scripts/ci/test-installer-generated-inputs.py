@@ -52,33 +52,23 @@ class GeneratedInputs(unittest.TestCase):
         result, output = self.zero("partial", "--github-repository", "example/operator", identities=False)
         self.assertNotEqual(result.returncode, 0); self.assertFalse(output.exists())
 
-    def test_wrapper_has_pre_aws_explicit_withdrawal_and_random_bounded_name(self):
+    def test_wrapper_derives_context_and_only_prompts_for_withdrawal_custody(self):
         source = WRAPPER.read_text()
-        fresh = source.index("step 'Collecting deployment settings'")
-        withdrawal_guard = source.index("withdrawal address must be explicitly configured", fresh)
-        aws_identity = source.index('identity="$(aws sts get-caller-identity', fresh)
-        self.assertLess(withdrawal_guard, aws_identity)
-        self.assertIn('DEFAULT_WITHDRAWAL="${DEFAULT_WITHDRAWAL:-}"', source)
-        self.assertIn('node-$(date -u +%y%m%d%H%M)-$(printf \'%04x\' "$RANDOM")', source)
-        # node- + ten UTC digits + hyphen + four random hexadecimal characters.
-        self.assertLessEqual(len("node-") + 10 + 1 + 4, 20)
+        self.assertIn('interactive-hoodi-defaults.sh', source)
+        self.assertIn("step 'Deriving deployment context'", source)
+        self.assertIn("Enter user-owned withdrawal address", source)
+        self.assertIn("Re-enter the withdrawal address to confirm custody", source)
+        self.assertNotIn("Type DEPLOY to continue", source)
+        self.assertNotIn("AWS Region'", source)
+        self.assertNotIn("Deployment name'", source)
+        self.assertNotIn("New absolute working directory'", source)
         self.assertIn('if [ -n "${WORK_DIR:-}" ]; then', source)
 
-    def test_name_generation_executes_under_fixed_time_and_preserves_override(self):
-        source = WRAPPER.read_text()
-        line = next(row for row in source.splitlines() if row.startswith('DEFAULT_DEPLOYMENT_NAME='))
-        script = 'date() { printf 2609151234; }; RANDOM=1234;\n'
-        script += 'for attempt in 1 2; do unset DEFAULT_DEPLOYMENT_NAME;\n' + line
-        script += '\nprintf "%s\\n" "$DEFAULT_DEPLOYMENT_NAME"; done\n'
-        script += 'DEFAULT_DEPLOYMENT_NAME=existing-deployment;\n' + line
-        script += '\nprintf "%s\\n" "$DEFAULT_DEPLOYMENT_NAME"\n'
-        result = subprocess.run(['bash', '-c', script], capture_output=True, text=True, check=True)
-        names = result.stdout.splitlines()
-        self.assertNotEqual(names[0], names[1])
-        for name in names[:2]:
-            self.assertRegex(name, r'^node-2609151234-[0-9a-f]{4}$')
-            self.assertLessEqual(len(name), 20)
-        self.assertEqual(names[2], 'existing-deployment')
+    def test_defaults_helper_generates_a_bounded_name(self):
+        helper = ROOT / "scripts/release/interactive-hoodi-defaults.sh"
+        source = helper.read_text()
+        self.assertIn("deployment_name=\"node-$(date -u +%y%m%d%H%M)-$(printf '%04x' \"$RANDOM\")\"", source)
+        self.assertLessEqual(len("node-") + 10 + 1 + 4, 20)
 
     def test_partial_trust_stops_in_wrapper_before_aws(self):
         source = WRAPPER.read_text()

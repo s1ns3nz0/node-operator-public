@@ -37,7 +37,7 @@ class InstallerStartupGuidanceTests(unittest.TestCase):
         self.assertIn("OIDC trust is separate", result.stderr)
         self.assertIn("RELEASE_RUNNER_ROLE_ARN", result.stderr)
         self.assertIn("GITOPS_EVIDENCE_APP_PRIVATE_KEY", result.stderr)
-        self.assertIn("Never paste or store AWS credentials", result.stderr)
+        self.assertIn("Do not provide credentials, tokens, private keys", result.stderr)
         self.assertIn("designated hidden ceremony prompt", result.stderr)
         self.assertIn("--profile <selected-profile> --region <selected-region>", result.stderr)
         self.assertIn("BUILDER_REACHED", result.stderr)
