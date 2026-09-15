@@ -197,9 +197,11 @@ expand_config_path() {
 }
 config_error() { printf 'configuration rejected at %s line %s\n' "$env_file" "$env_file_line" >&2; exit 64; }
 
-# This public entrypoint deliberately ignores configuration files. Its defaults
-# are derived from the authenticated AWS CLI profile, gh CLI, and git origin.
-env_file=''
+# Optional local non-secret defaults. Repository/identity values are still
+# derived and validated from AWS CLI, gh CLI, and git origin.
+DEFAULT_KEYSTORE_DIR=''; DEFAULT_VALIDATOR_SET='hoodi-example'; DEFAULT_VALIDATOR_KEY=''; DEFAULT_WITHDRAWAL=''; DEFAULT_AUDIT_REPLICA_REGION=''; DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE=COMPLIANCE
+env_file="${NODE_OPERATOR_ENV_FILE:-$source_root/.env}"
+[ -f "$env_file" ] && [ ! -L "$env_file" ] || env_file=''
 if [ -n "$env_file" ]; then
   env_file="$(cd "$(dirname "$env_file")" && pwd -P)/$(basename "$env_file")"
   config_source_path="${NODE_OPERATOR_CONFIG_SOURCE_PATH:-$env_file}"
@@ -228,7 +230,6 @@ else
   DEFAULT_GITHUB_REPOSITORY="$(jq -er '.github_repository' <<<"$runtime_defaults")"; DEFAULT_GITHUB_OWNER_ID="$(jq -er '.github_owner_id' <<<"$runtime_defaults")"; DEFAULT_GITHUB_REPOSITORY_ID="$(jq -er '.github_repository_id' <<<"$runtime_defaults")"
   DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY="$(jq -er '.gitops_client_github_repository' <<<"$runtime_defaults")"; DEFAULT_GITOPS_CLIENT_GITHUB_OWNER_ID="$(jq -er '.gitops_client_github_owner_id' <<<"$runtime_defaults")"; DEFAULT_GITOPS_CLIENT_GITHUB_REPOSITORY_ID="$(jq -er '.gitops_client_github_repository_id' <<<"$runtime_defaults")"
 fi
-DEFAULT_KEYSTORE_DIR=''; DEFAULT_VALIDATOR_SET='hoodi-example'; DEFAULT_VALIDATOR_KEY=''; DEFAULT_WITHDRAWAL=''; DEFAULT_AUDIT_REPLICA_REGION=''; DEFAULT_CI_EVIDENCE_ARCHIVE_RETENTION_MODE=COMPLIANCE
 validate_selected_github_identity() {
   local repository="$1" owner_id="$2" repository_id="$3"
   [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "$owner_id" =~ ^[1-9][0-9]*$ && "$repository_id" =~ ^[1-9][0-9]*$ ]] || {
