@@ -1,0 +1,278 @@
+# Purpose: Verify a release bundle or explicitly publish it; manual dispatch defaults to verification only.
+name: Release Bundle
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Verify the bundle only, or verify and publish
+        type: choice
+        required: true
+        default: verify-only
+        options: [verify-only, publish]
+
+permissions:
+  contents: read
+
+jobs:
+  # Role: Require reviewed main ancestry and exact-revision CI evidence before publication.
+  eligibility:
+    name: Release Eligibility
+    if: github.event_name == 'push' || inputs.mode == 'publish'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Role: Check main ancestry, required CI provenance and the merged PR evidence decision before release.
+      - name: Exact source release eligibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci/verify-release-source-eligibility.sh "$GITHUB_SHA"
+  # Role: Build reproducibility evidence, scan the exact SBOM and export the approved artifact digest; no publication authority.
+  reproducibility:
+    name: Release Integrity
+    environment: gitops-evidence-reader
+    needs: eligibility
+    if: >-
+      ${{ !cancelled() && (needs.eligibility.result == 'success' ||
+          (github.event_name == 'workflow_dispatch' && inputs.mode == 'verify-only')) }}
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+      id-token: write
+      attestations: write
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_digest: ${{ steps.sca-binding.outputs.artifact_digest }}
+    env:
+      # Published by reviewed source 986894d; includes Python required by the bundle validators.
+      RELEASE_BUILD_IMAGE: ghcr.io/s1ns3nz0/node-operator/release-build@sha256:5221febd3278d7081ec6e5655b2d5036b4c22c5cca6755be036517d10eb05254
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Role: Mint an automatically revoked token for one private repository's Actions evidence only.
+      - name: GitOps evidence reader token
+        id: gitops-reader
+        if: hashFiles('release/client-chart-publication-authorization.json') != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.GITOPS_EVIDENCE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.GITOPS_EVIDENCE_APP_PRIVATE_KEY }}
+          owner: s1ns3nz0
+          repositories: node-operator-public-gitops
+          permission-actions: read
+          skip-token-revoke: false
+      # Role: Obtain one independently validated, exact-revision image-publication record set before building release evidence.
+      - name: Prepare publication records
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITOPS_EVIDENCE_TOKEN: ${{ steps.gitops-reader.outputs.token }}
+        run: bash scripts/ci/prepare-release-publication-records.sh
+      # Role: Read exact versioned private staging objects without persisting AWS credentials across steps.
+      - name: Version-bound OCI release inputs
+        # Historical verification may omit OCI transport; every new publication must include it.
+        if: hashFiles('release/oci-payload-source.json') != '' || github.event_name == 'push' || inputs.mode == 'publish'
+        env:
+          OCI_STAGING_READ_ROLE_ARN: ${{ vars.OCI_STAGING_READ_ROLE_ARN }}
+        run: bash scripts/ci/workflows/fetch-release-oci-payload.sh
+      # Role: Build the bundle with the pinned toolchain and compare repeat builds for deterministic output.
+      - name: Reproducible Release Bundle
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
+          OCI_PAYLOAD_MANIFEST: ${{ (hashFiles('release/oci-payload-source.json') != '' || github.event_name == 'push' || inputs.mode == 'publish') && format('{0}/release-oci/payload/payload-manifest.json', runner.temp) || '' }}
+        run: bash scripts/ci/workflows/check-reproducible-release.sh
+      # Role: Freeze the independently verified source records for same-release publication consumption.
+      - name: Freeze publication records
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-publication-records-${{ github.sha }}
+          path: ${{ runner.temp }}/release-publication-records
+          if-no-files-found: error
+          retention-days: 90
+      - name: Freeze Prysm publication record
+        if: hashFiles('release/prysm-publication-authorization.json') != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: prysm-publication-record-${{ github.sha }}
+          path: ${{ runner.temp }}/prysm-publication-record/prysm-mtls-publication-record.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Freeze Fence publication record
+        if: hashFiles('release/fence-publication-authorization.json') != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: fence-publication-record-${{ github.sha }}
+          path: ${{ runner.temp }}/fence-publication-record/fence-release-verification.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Freeze client chart publication records
+        if: hashFiles('release/client-chart-publication-authorization.json') != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: client-chart-publication-records-${{ github.sha }}
+          path: ${{ runner.temp }}/client-chart-publication-records
+      - name: Freeze signer-probe publication record
+        if: hashFiles('release/signer-probe-publication-authorization.json') != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: signer-probe-publication-record-${{ github.sha }}
+          path: ${{ runner.temp }}/signer-probe-publication-record/signer-identity-probe-publication-record.json
+          if-no-files-found: error
+          retention-days: 90
+      # Role: Install the pinned SCA tool and scan the SBOM belonging to this bundle.
+      - name: Exact release SBOM
+        run: |
+          scripts/ci/install-release-sca-tool.sh "$RUNNER_TEMP/release-sca-bin"
+          PATH="$RUNNER_TEMP/release-sca-bin:$PATH" scripts/ci/scan-release-sbom.sh \
+            "$RUNNER_TEMP/current/sbom.cyclonedx.json" \
+            "$RUNNER_TEMP/current/sbom-sca.json"
+      # Role: Generate GitHub's signed SLSA build provenance for the exact release bundle.
+      - name: SLSA build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/current/node-operator-release-bundle.tar
+      # Role: Upload the scan summary as release evidence, not as an approval by itself.
+      - name: Release SBOM SCA evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-sbom-sca-${{ github.sha }}
+          path: ${{ runner.temp }}/current/sbom-sca.json
+          if-no-files-found: error
+          retention-days: 90
+      # Role: Reject failed scans or Critical, High and Unknown findings.
+      - name: Release SBOM SCA decision
+        run: jq -e '.status == "passed" and .findings.critical == 0 and .findings.high == 0 and .findings.unknown == 0' "$RUNNER_TEMP/current/sbom-sca.json" >/dev/null
+      # Role: Export the scanned artifact digest for the publishing job's exact-artifact checks.
+      - name: Approved release binding
+        id: sca-binding
+        run: |
+          artifact_digest="$(jq -er '.artifact_digest' "$RUNNER_TEMP/current/sbom-sca.json")"
+          printf 'artifact_digest=%s\n' "$artifact_digest" >> "$GITHUB_OUTPUT"
+      # Role: Fetch a prior release when available for integrity comparison.
+      - name: Previous Release
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/workflows/fetch-previous-release.sh
+      # Role: Compare current and previous release integrity metadata.
+      - name: Release Comparison
+        if: steps.previous.outputs.available == 'true'
+        run: scripts/ci/compare-release-integrity.sh "$RUNNER_TEMP/previous" "$RUNNER_TEMP/current" "$RUNNER_TEMP/current/integrity.json"
+      # Role: Record an explicit baseline when there is no previous release to compare.
+      - name: Initial Release Baseline
+        if: steps.previous.outputs.available != 'true'
+        run: |
+          jq -n --arg sha "$GITHUB_SHA" '{schema_version:"v1",status:"baseline",source_revision:$sha}' \
+            > "$RUNNER_TEMP/current/integrity.json"
+      # Role: Upload the comparison or initial-baseline result for later inspection.
+      - name: Integrity evidence
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: release-integrity-${{ github.sha }}
+          path: ${{ runner.temp }}/current/integrity.json
+          retention-days: 90
+  # Role: Rebuild the approved bundle, hand off signing and publish release assets using the protected private runner.
+  build-and-publish:
+    name: Signed Release
+    needs: [eligibility, reproducibility]
+    if: >-
+      (github.event_name == 'push' || inputs.mode == 'publish') &&
+      needs.eligibility.result == 'success' && needs.reproducibility.result == 'success'
+    # PRIVATE_RELEASE_RUNNER_PROJECT is a repository variable: runs-on is
+    # resolved before the release Environment is available. It selects only
+    # the dedicated CodeBuild project; the exact run identity remains fixed.
+    # A GitHub-hosted or broadly shared runner must never acquire this path.
+    runs-on: codebuild-${{ vars.PRIVATE_RELEASE_RUNNER_PROJECT || 'node-operator-baseline-private-release' }}-${{ github.run_id }}-${{ github.run_attempt }}
+    environment: release
+    permissions:
+      contents: write
+      actions: read
+      packages: read
+      id-token: write
+    env:
+      # Match the independently verified reproducibility executor exactly.
+      RELEASE_BUILD_IMAGE: ghcr.io/s1ns3nz0/node-operator/release-build@sha256:5221febd3278d7081ec6e5655b2d5036b4c22c5cca6755be036517d10eb05254
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Role: Consume only the frozen record set produced by this release workflow run.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        with:
+          name: release-publication-records-${{ github.sha }}
+          path: ${{ runner.temp }}/release-publication-records
+      - name: Download frozen Prysm publication record
+        if: hashFiles('release/prysm-publication-authorization.json') != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        with:
+          name: prysm-publication-record-${{ github.sha }}
+          path: ${{ runner.temp }}/prysm-publication-record
+      - name: Download frozen Fence publication record
+        if: hashFiles('release/fence-publication-authorization.json') != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        with:
+          name: fence-publication-record-${{ github.sha }}
+          path: ${{ runner.temp }}/fence-publication-record
+      - name: Download frozen client chart publication records
+        if: hashFiles('release/client-chart-publication-authorization.json') != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        with:
+          name: client-chart-publication-records-${{ github.sha }}
+          path: ${{ runner.temp }}/client-chart-publication-records
+      - name: Download frozen signer-probe publication record
+        if: hashFiles('release/signer-probe-publication-authorization.json') != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v5.0.0
+        with:
+          name: signer-probe-publication-record-${{ github.sha }}
+          path: ${{ runner.temp }}/signer-probe-publication-record
+      # Role: Refetch the same versioned OCI inputs used by the integrity job.
+      - name: Version-bound OCI release inputs
+        env:
+          OCI_STAGING_READ_ROLE_ARN: ${{ vars.OCI_STAGING_READ_ROLE_ARN }}
+        run: bash scripts/ci/workflows/fetch-release-oci-payload.sh
+      # Role: Rebuild the release and verify it matches the approved bundle and SBOM digest.
+      - name: Release Bundle
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          APPROVED_ARTIFACT_DIGEST: ${{ needs.reproducibility.outputs.artifact_digest }}
+          OCI_PAYLOAD_MANIFEST: ${{ format('{0}/release-oci/payload/payload-manifest.json', runner.temp) }}
+          PUBLICATION_RECORDS_DIR: ${{ runner.temp }}/release-publication-records
+          GH_TOKEN: ${{ github.token }}
+          PRYSM_PUBLICATION_RECORD: ${{ runner.temp }}/prysm-publication-record/prysm-mtls-publication-record.json
+          FENCE_PUBLICATION_RECORD: ${{ hashFiles('release/fence-publication-authorization.json') != '' && format('{0}/fence-publication-record/fence-release-verification.json', runner.temp) || '' }}
+          CLIENT_CHART_PUBLICATION_RECORDS: ${{ hashFiles('release/client-chart-publication-authorization.json') != '' && format('{0}/client-chart-publication-records', runner.temp) || '' }}
+          SIGNER_PROBE_PUBLICATION_RECORD: ${{ hashFiles('release/signer-probe-publication-authorization.json') != '' && format('{0}/signer-probe-publication-record/signer-identity-probe-publication-record.json', runner.temp) || '' }}
+        run: scripts/release/build-release-bundle.sh
+      # Role: Stage inputs for the private signing path and obtain signed release outputs.
+      - name: Release Signing Handoff
+        env:
+          AWS_ROLE_ARN: ${{ vars.RELEASE_RUNNER_ROLE_ARN }}
+          AWS_REGION: ap-northeast-2
+          INPUT_BUCKET: ${{ vars.RELEASE_ARTIFACT_BUCKET }}
+          # RELEASE_SIGNER_PROJECT is a release Environment variable because
+          # it is read only after the protected runner has started.
+          RELEASE_SIGNER_PROJECT: ${{ vars.RELEASE_SIGNER_PROJECT }}
+        run: scripts/release/sign-release-bundle.sh
+      # Role: Create or update the GitHub release and attach its verified assets.
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_ARTIFACT_DIGEST: ${{ needs.reproducibility.outputs.artifact_digest }}
+          OCI_PAYLOAD_DIR: ${{ format('{0}/release-oci/payload', runner.temp) }}
+        run: scripts/release/create-github-release.sh
