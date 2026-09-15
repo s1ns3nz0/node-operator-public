@@ -46,10 +46,17 @@ release_revision="$(jq -er '.source_revision | select(test("^[0-9a-f]{40}$"))' "
   printf '%s\n' 'release bundle revision is invalid; platform bootstrap was not requested' >&2
   exit 65
 }
+# Verify the extracted signed bundle before accepting an account, deployment
+# identity, or interactive input. The later artifact gate consumes only this
+# already-authenticated release context; it cannot turn local files into a
+# substitute authority.
+"$source_root/scripts/release/node-operator-release.sh" verify --bundle-root "$bundle_root" >/dev/null || {
+  printf '%s\n' 'release bundle verification failed; no resources changed' >&2
+  exit 65
+}
 artifact_authority_gate() {
   local account="$1" region="$2" deployment="$3" revision inventory
   revision="$(jq -er '.source_revision | select(test("^[0-9a-f]{40}$"))' "$bundle_root/bundle-manifest.json")" || { printf '%s\n' 'release bundle revision is invalid; no resources changed' >&2; return 65; }
-  "$source_root/scripts/release/node-operator-release.sh" verify --bundle-root "$bundle_root" >/dev/null || { printf '%s\n' 'release bundle verification failed; no resources changed' >&2; return 65; }
   inventory="$(python3 "$artifact_inventory" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$region" --deployment-name "$deployment" --require-signer-probe)" || { printf '%s\n' 'required installer artifact authority is unresolved; no resources changed' >&2; return 65; }
   printf '%s\n' "$inventory"
 }

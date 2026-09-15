@@ -57,8 +57,7 @@ class ArtifactFirst(unittest.TestCase):
     if failure:
      self.assertNotEqual(result.returncode,0); self.assertFalse(any("node:zero:apply" in x for x in rows))
     else:
-     self.assertEqual(result.returncode,0,result.stderr); self.assertLess(rows.index(next(x for x in rows if x.startswith("inventory:"))),rows.index(next(x for x in rows if "node:zero:prepare-artifacts" in x))); self.assertTrue(rows[-1].startswith("node:zero:apply"))
-     self.assertTrue(all(":chosen:unset:kept" in x for x in rows if x.startswith("inventory:") or x.startswith("node:zero:")))
+     self.assertEqual(result.returncode,0,result.stderr); self.assertLess(rows.index(next(x for x in rows if "node:zero:prepare-artifacts" in x)), rows.index(next(x for x in rows if x.startswith("inventory:")))); self.assertTrue(rows[-1].startswith("node:zero:apply")); self.assertTrue(all(":chosen:unset:kept" in x for x in rows if x.startswith("inventory:") or x.startswith("node:zero:")))
  def test_vault_partial_state_resumes_without_forcing_non_vault_resume(self):
   with tempfile.TemporaryDirectory() as temp:
    root=Path(temp); env,args,log=self.fixture(root); work=Path(args[args.index("--work-dir")+1]); work.mkdir(); (work/"vault-artifact-mirror-receipt.json").write_text("partial")

@@ -163,7 +163,7 @@ prepare_line="$(rg -n '^release zero prepare-artifacts ' "$trace" | head -n1 | c
 vault_line="$(rg -n '^mirror mirror --bundle-root ' "$trace" | head -n1 | cut -d: -f1)"
 non_vault_line="$(rg -n '^mirror mirror --scope non-vault ' "$trace" | head -n1 | cut -d: -f1)"
 apply_line="$(rg -n '^release zero apply ' "$trace" | head -n1 | cut -d: -f1)"
-[ "$inventory_line" -lt "$prepare_line" ] && [ "$prepare_line" -lt "$vault_line" ] && [ "$vault_line" -lt "$non_vault_line" ] && [ "$non_vault_line" -lt "$apply_line" ] || { printf '%s\n' 'artifact-first infrastructure order is invalid' >&2; exit 1; }
+[ "$prepare_line" -lt "$inventory_line" ] && [ "$inventory_line" -lt "$vault_line" ] && [ "$vault_line" -lt "$non_vault_line" ] && [ "$non_vault_line" -lt "$apply_line" ] || { printf '%s\n' 'artifact-first infrastructure order is invalid' >&2; exit 1; }
 mkdir -p "$scratch/zero"; printf '{}' > "$scratch/zero/ops-access-handoff.json"
 TRACE="$trace" "$script" ops-inputs prepare --bundle-root "$bundle" --inputs "$inputs/hoodi-zero-release-inputs.json" --zero-work-dir "$scratch/zero" --output-dir "$scratch/ops" >/dev/null
 rg -F "ops --handoff $scratch/zero/ops-access-handoff.json --output-dir $scratch/ops" "$trace" >/dev/null

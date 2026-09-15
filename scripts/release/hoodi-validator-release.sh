@@ -227,11 +227,15 @@ case "$command_name" in
     deployment_name="$(jq -er '.name | select(test("^[a-z][a-z0-9-]{1,18}[a-z0-9]$"))' "$expected_baseline")" || { printf '%s\n' 'zero-resource baseline configuration lacks deployment name' >&2; exit 65; }
     selected_env=(env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_SECURITY_TOKEN -u BASH_ENV AWS_PROFILE="$profile" AWS_REGION="$input_region")
     "${selected_env[@]}" aws sts get-caller-identity --cli-connect-timeout 10 --cli-read-timeout 20 --query Account --output text | grep -qx "$account" || { printf '%s\n' 'selected AWS profile does not match release account' >&2; exit 65; }
-    "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe >/dev/null || { printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
-    # Establish the exact deployment-bound ECR/KMS and publisher OIDC closure
-    # before artifact mirroring. Inventory and mirror verification remain
-    # fail-closed authority gates; this never accepts unapproved artifacts.
+    # The signed bundle is verified above. Establish the exact deployment-bound
+    # ECR/KMS and publisher OIDC closure before evaluating full inventory
+    # evidence: a fresh account cannot have deployment-scoped artifact custody
+    # before this narrowly validated prerequisite phase creates it.
     "${selected_env[@]}" "$release_dir/node-operator-release.sh" zero prepare-artifacts --bundle-root "$bundle_root" --inputs "$zero_inputs" --work-dir "$work_dir" --include-publishers
+    # Keep the full inventory fail-closed after bootstrap. A prerequisite
+    # projection only proves destination ownership; it never approves an
+    # artifact source or substitutes for immutable release evidence.
+    "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe >/dev/null || { printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
     adapter=("$release_dir/mirror-installer-vault-artifacts.py")
     mirror_args=(--bundle-root "$bundle_root" --state-dir "$work_dir" --work-dir "$work_dir" --inputs-dir "$(dirname "$zero_inputs")" --account "$account" --region "$input_region" --deployment-name "$deployment_name" --profile "$profile" --release-sha "$revision")
     if [ -e "$work_dir/vault-artifact-mirror-receipt.json" ] || [ -e "$work_dir/vault-artifact-manifest.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-binding.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-verified.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-uncertain.json" ] || [ -L "$work_dir/vault-artifact-mirror-receipt.json" ] || [ -L "$work_dir/vault-artifact-manifest.json" ] || [ -L "$work_dir/vault-pre-eks-artifact-mirror-uncertain.json" ]; then vault_operation=resume; else vault_operation=mirror; fi
