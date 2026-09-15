@@ -302,7 +302,7 @@ def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, in
             if repository_address not in expected_repositories or not (_contains_string(source, repository_address) or _contains_string(source, repository_source)):
                 raise PrerequisiteError("Terraform plan lifecycle dependency is invalid")
     if seen != required:
-        raise PrerequisiteError("Terraform plan omitted an exact artifact prerequisite")
+        raise PrerequisiteError(f"Terraform plan omitted exact artifact prerequisites: {', '.join(sorted(required - seen))}")
 
 
 def _validate_publisher(address: str, after: dict[str, Any], detail: dict[str, Any], source: dict[str, Any], account: str, region: str, name: str, github_identity: tuple[str, str, str] | None, gitops_identity: tuple[str, str, str] | None) -> None:
