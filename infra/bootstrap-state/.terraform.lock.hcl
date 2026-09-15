@@ -1,11 +1,12 @@
 # This file is maintained automatically by "terraform init".
-# Manual edits may be lost in future updates.
+# It pins the provider for reproducible first-run bootstrap.
 
 provider "registry.terraform.io/hashicorp/aws" {
   version     = "5.100.0"
   constraints = ">= 5.31.0, < 6.0.0"
   hashes = [
     "h1:Ijt7pOlB7Tr7maGQIqtsLFbl7pSMIj06TVdkoSBcYOw=",
+    "h1:PI0OJEVbr2Zdclvsrxshq6bCaxK0tTIj/gp93uhg26I=",
     "h1:edXOJWE4ORX8Fm+dpVpICzMZJat4AX0VRCAy/xkcOc0=",
     "zh:054b8dd49f0549c9a7cc27d159e45327b7b65cf404da5e5a20da154b90b8a644",
     "zh:0b97bf8d5e03d15d83cc40b0530a1f84b459354939ba6f135a0086c20ebbe6b2",
