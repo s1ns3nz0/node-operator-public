@@ -50,7 +50,7 @@ PUBLISHER_RESOURCES = {
     "aws_iam_role.github_vault_audit_relay_publisher[0]": "github-vault-audit-relay-publisher",
     "aws_iam_role.github_gitops_client_ecr_publisher[0]": "github-gitops-client-ecr-publisher",
     "aws_iam_role_policy.github_validator_client_mirror[0]": "github-validator-client-mirror",
-    "aws_iam_role_policy.github_validator_signer_identity_probe_mirror[0]": "github-validator-signer-identity-probe-mirror",
+    "aws_iam_role_policy.github_validator_signer_identity_probe_mirror[0]": "github-validator-client-mirror",
     "aws_iam_role_policy.github_validator_log_collector_mirror[0]": "github-validator-log-collector-mirror",
     "aws_iam_role_policy.github_vault_audit_relay_publisher[0]": "github-vault-audit-relay-publisher",
     "aws_iam_role_policy.github_gitops_client_ecr_publisher[0]": "github-gitops-client-ecr-publisher",
