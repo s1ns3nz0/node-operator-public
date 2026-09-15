@@ -29,6 +29,13 @@ PLAN_DATA_READS = {
     "data.aws_iam_policy_document.validator_log_collector_ecr_key[0]",
     "data.aws_iam_policy_document.validator_runtime_ecr_key[0]",
     "data.aws_iam_policy_document.github_gitops_client_ecr_publisher[0]",
+    "data.aws_iam_policy_document.github_validator_client_mirror[0]",
+    "data.aws_iam_policy_document.github_validator_log_collector_mirror[0]",
+    "data.aws_iam_policy_document.github_vault_audit_relay_publisher[0]",
+    "data.aws_iam_policy_document.github_gitops_client_ecr_publisher_assume_role[0]",
+    "data.aws_iam_policy_document.github_validator_client_mirror_assume_role[0]",
+    "data.aws_iam_policy_document.github_validator_log_collector_mirror_assume_role[0]",
+    "data.aws_iam_policy_document.github_vault_audit_relay_publisher_assume_role[0]",
     "data.aws_iam_policy_document.vault_audit_relay_ecr_key[0]",
 }
 PRIVATE_GITOPS = {
@@ -199,7 +206,7 @@ def validate_plan(plan: dict[str, Any], account: str, region: str, name: str, in
             if address == "data.aws_iam_policy_document.kms_key_administrator":
                 if not _contains_string(after, f"arn:aws:iam::{account}:root"):
                     raise PrerequisiteError("Terraform plan KMS policy read is not account-bound")
-            elif address == "data.aws_iam_policy_document.github_gitops_client_ecr_publisher[0]":
+            elif address.startswith("data.aws_iam_policy_document.github_"):
                 # This generated policy is a configuration-derived KMS document
                 # with no rendered account/repository literal. Its exact trust
                 # binding is validated on the managed IAM role and key policy
