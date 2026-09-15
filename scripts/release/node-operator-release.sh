@@ -518,9 +518,10 @@ zero_apply() {
   if [ "$bootstrap_state_migration_required" -eq 1 ]; then
     # Restore the backend block only after its bucket and lock table exist.
     [ -f "$bootstrap_module/versions.tf.disabled" ] && mv "$bootstrap_module/versions.tf.disabled" "$bootstrap_module/versions.tf"
-    # Bootstrap begins in local state because the remote backend is being made.
-    # Migration is explicit and never uses force-copy.
-    terraform -chdir="$bootstrap_module" init -input=false -migrate-state -backend-config="$bootstrap_backend"
+    # The remote backend was just created by this exact local state and was
+    # ownership-validated above. Terraform otherwise asks an unusable stdin
+    # confirmation even though this guarded installer runs non-interactively.
+    terraform -chdir="$bootstrap_module" init -input=false -migrate-state -force-copy -backend-config="$bootstrap_backend"
   fi
 
   if [ "$operation" = prepare-artifacts ]; then
