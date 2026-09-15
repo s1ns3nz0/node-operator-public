@@ -1,0 +1,6 @@
+interface:
+  display_name: "Show, don't tell"
+  short_description: "Prove observable behavior before completion"
+  default_prompt: "Use $show-dont-tell to produce and independently assess task-appropriate behavioral proof."
+policy:
+  allow_implicit_invocation: true

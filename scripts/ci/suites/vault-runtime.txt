@@ -1,0 +1,7 @@
+scripts/ci/test-vault-runtime-verifier-policy.py
+scripts/ci/test-vault-runtime-scan.py
+scripts/ci/test-vault-runtime-verification-contract.py
+scripts/ci/test-vault-runtime-applicability.py
+scripts/ci/test-vault-grpc-patch-contract.py
+scripts/ci/test-vault-runtime-verification-statement.py
+scripts/ci/test-vault-runtime-signing-contract.py

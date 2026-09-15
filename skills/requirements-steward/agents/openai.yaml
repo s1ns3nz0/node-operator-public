@@ -1,0 +1,6 @@
+interface:
+  display_name: "Requirements steward"
+  short_description: "Turn a service idea into an approved requirement"
+  default_prompt: "Use $requirements-steward to turn my service idea into an approved repository requirement."
+policy:
+  allow_implicit_invocation: false

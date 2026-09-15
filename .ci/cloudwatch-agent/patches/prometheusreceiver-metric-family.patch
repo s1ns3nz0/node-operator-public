@@ -1,0 +1,109 @@
+--- a/internal/metadata.go
++++ b/internal/metadata.go
+@@ -16,28 +16,28 @@
+ // internalMetricMetadata allows looking up metadata for internal scrape metrics
+ var internalMetricMetadata = map[string]*scrape.MetricMetadata{
+ 	scrapeUpMetricName: {
+-		Metric: scrapeUpMetricName,
++		MetricFamily: scrapeUpMetricName,
+ 		Type:   model.MetricTypeGauge,
+ 		Help:   "The scraping was successful",
+ 	},
+ 	"scrape_duration_seconds": {
+-		Metric: "scrape_duration_seconds",
++		MetricFamily: "scrape_duration_seconds",
+ 		Unit:   "seconds",
+ 		Type:   model.MetricTypeGauge,
+ 		Help:   "Duration of the scrape",
+ 	},
+ 	"scrape_samples_scraped": {
+-		Metric: "scrape_samples_scraped",
++		MetricFamily: "scrape_samples_scraped",
+ 		Type:   model.MetricTypeGauge,
+ 		Help:   "The number of samples the target exposed",
+ 	},
+ 	"scrape_series_added": {
+-		Metric: "scrape_series_added",
++		MetricFamily: "scrape_series_added",
+ 		Type:   model.MetricTypeGauge,
+ 		Help:   "The approximate number of new series in this scrape",
+ 	},
+ 	"scrape_samples_post_metric_relabeling": {
+-		Metric: "scrape_samples_post_metric_relabeling",
++		MetricFamily: "scrape_samples_post_metric_relabeling",
+ 		Type:   model.MetricTypeGauge,
+ 		Help:   "The number of samples remaining after metric relabeling was applied",
+ 	},
+@@ -61,7 +61,7 @@
+ 	}
+ 	// Otherwise, the metric is unknown
+ 	return &scrape.MetricMetadata{
+-		Metric: metricName,
++		MetricFamily: metricName,
+ 		Type:   model.MetricTypeUnknown,
+ 	}, metricName
+ }
+--- a/internal/metricfamily.go
++++ b/internal/metricfamily.go
+@@ -397,7 +397,7 @@
+ 			mg.ts = t
+ 			mg.count = v
+ 			mg.hasCount = true
+-		case metricName == mf.metadata.Metric+metricSuffixCreated:
++		case metricName == mf.metadata.MetricFamily+metricSuffixCreated:
+ 			mg.created = v
+ 		default:
+ 			boundary, err := getBoundary(mf.mtype, ls)
+@@ -407,11 +407,11 @@
+ 			mg.complexValue = append(mg.complexValue, &dataPoint{value: v, boundary: boundary})
+ 		}
+ 	case pmetric.MetricTypeExponentialHistogram:
+-		if metricName == mf.metadata.Metric+metricSuffixCreated {
++		if metricName == mf.metadata.MetricFamily+metricSuffixCreated {
+ 			mg.created = v
+ 		}
+ 	case pmetric.MetricTypeSum:
+-		if metricName == mf.metadata.Metric+metricSuffixCreated {
++		if metricName == mf.metadata.MetricFamily+metricSuffixCreated {
+ 			mg.created = v
+ 		} else {
+ 			mg.value = v
+--- a/internal/transaction.go
++++ b/internal/transaction.go
+@@ -450,7 +450,7 @@
+ 	return scope
+ }
+ 
+-func (t *transaction) initTransaction(labels labels.Labels) (*resourceKey, error) {
++func (t *transaction) initTransaction(seriesLabels labels.Labels) (*resourceKey, error) {
+ 	target, ok := scrape.TargetFromContext(t.ctx)
+ 	if !ok {
+ 		return nil, errors.New("unable to find target in context")
+@@ -460,12 +460,12 @@
+ 		return nil, errors.New("unable to find MetricMetadataStore in context")
+ 	}
+ 
+-	rKey, err := t.getJobAndInstance(labels)
++	rKey, err := t.getJobAndInstance(seriesLabels)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+ 	if _, ok := t.nodeResources[*rKey]; !ok {
+-		t.nodeResources[*rKey] = CreateResource(rKey.job, rKey.instance, target.DiscoveredLabels())
++		t.nodeResources[*rKey] = CreateResource(rKey.job, rKey.instance, target.DiscoveredLabels(labels.NewBuilder(labels.EmptyLabels())))
+ 	}
+ 
+ 	t.isNew = false
+--- a/targetallocator/manager.go
++++ b/targetallocator/manager.go
+@@ -246,9 +246,10 @@
+ 		return fmt.Errorf("could not get scrape configs: %w", err)
+ 	}
+ 	if !m.enableNativeHistograms {
++		alwaysScrapeClassicHistograms := true
+ 		// Enforce scraping classic histograms to avoid dropping them.
+ 		for _, scrapeConfig := range m.promCfg.ScrapeConfigs {
+-			scrapeConfig.AlwaysScrapeClassicHistograms = true
++			scrapeConfig.AlwaysScrapeClassicHistograms = &alwaysScrapeClassicHistograms
+ 		}
+ 	}

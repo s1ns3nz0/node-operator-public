@@ -1,0 +1,11 @@
+**
+!.ci/
+!.ci/scanners/
+!.ci/scanners/Dockerfile
+!.ci/scanners/run-security-scan.sh
+!scripts/
+!scripts/ci/
+!scripts/ci/collect-pr-evidence.sh
+!scripts/ci/collect-security-evidence.sh
+!scripts/ci/lib/
+!scripts/ci/lib/common.sh

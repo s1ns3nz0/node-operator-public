@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vault": {
+    "version": "2.1.0",
+    "commit": "cb6a54face072e372480d7cc2e64a3110b84756f",
+    "source_url": "https://github.com/hashicorp/vault/archive/cb6a54face072e372480d7cc2e64a3110b84756f.tar.gz",
+    "source_sha256": "1e5cca418c6bc51c2a73d8fc056c2022f64dbbf806eb049e0d88651aa550daa7"
+  },
+  "builder": {
+    "image": "golang:1.26.6-alpine3.24",
+    "linux_amd64_manifest": "sha256:1a9c10cf505a9e6b1e96ea77ebdbfe79a0f10380181faf88bc3b51d7e4315fae"
+  },
+  "runtime": {
+    "image": "alpine:3.24",
+    "linux_amd64_manifest": "sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f",
+    "packages": {
+      "ca-certificates": "20260611-r0",
+      "libcrypto3": "3.5.8-r0",
+      "libssl3": "3.5.8-r0"
+    }
+  },
+  "compatibility_test_server": {
+    "image": "hashicorp/vault:1.20.4",
+    "linux_amd64_manifest": "sha256:20ff3ed4a4da750d1be0757c82e0a10accc00c26c157bde3a694f2b227300caf",
+    "scope": "test-only ephemeral dev server on an internal Docker network"
+  },
+  "dependency_overrides": {
+    "github.com/apache/thrift": "v0.24.0",
+    "golang.org/x/crypto": "v0.56.0",
+    "google.golang.org/grpc": "v1.83.2",
+    "resulting_go_mod_sha256": "0377034eba756738494bdc0c0f1ff0fef524846398a5f96aa977049331c5d6b2",
+    "resulting_go_sum_sha256": "3f06f5ebaed07dc186567fa3a48f0d310e505b090c386ddad77a76ceba72d303"
+  }
+}

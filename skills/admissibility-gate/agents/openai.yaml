@@ -1,0 +1,6 @@
+interface:
+  display_name: "Admissibility gate"
+  short_description: "Taste durable artifacts with pinned Paperthin checks"
+  default_prompt: "Use $admissibility-gate to check the changed durable artifacts before handoff."
+policy:
+  allow_implicit_invocation: true

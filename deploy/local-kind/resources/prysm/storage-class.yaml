@@ -1,0 +1,19 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: prysm-hoodi-gp3-kms
+  labels:
+    app.kubernetes.io/part-of: hoodi-node
+    node-operator.io/encryption-policy: baseline-ebs-kms
+provisioner: ebs.csi.aws.com
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: gp3
+  iops: "6000"
+  throughput: "250"
+  encrypted: "true"
+  # The T-2 baseline creates this alias for its EBS KMS key. A build integration
+  # must resolve it in the approved account before this manifest is applied.
+  kmsKeyId: alias/node-operator-baseline-ebs

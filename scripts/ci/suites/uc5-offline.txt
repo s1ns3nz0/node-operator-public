@@ -1,0 +1,15 @@
+scripts/ci/test-uc5-runtime-role-state.py
+scripts/ci/test-uc5-live-guards.py
+scripts/ci/test-uc5-vault-adapter.py
+scripts/ci/test-uc5-ceremony.py
+scripts/ci/test-uc5-kube-control.py
+scripts/ci/test-uc5-kube-state.py
+scripts/ci/test-uc5-audit-proof.py
+scripts/ci/test-uc5-audit-reader.py
+scripts/ci/test-uc5-live-actions.py
+scripts/ci/test-uc5-probes.py
+scripts/ci/test-uc5-beacon-reader.py
+scripts/ci/test-uc5-continuity.py
+scripts/ci/test-uc5-entrypoint.py
+scripts/ci/test-uc5-recovery-wrapper.py
+scripts/ci/test-uc5-activation-evidence.py

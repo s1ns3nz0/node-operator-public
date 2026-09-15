@@ -1,0 +1,61 @@
+{
+  "baseline": {
+    "eks_clusters": [
+      {
+        "address": "aws_eks_cluster.node_operator",
+        "endpoint_private_access": true,
+        "endpoint_public_access": false,
+        "encrypted_resources": ["secrets"],
+        "kms_key_arn": "arn:aws:kms:ap-northeast-2:111122223333:key/01234567-89ab-cdef-0123-456789abcdef"
+      }
+    ],
+    "managed_node_groups": [
+      {
+        "address": "aws_eks_node_group.private",
+        "instance_types": ["m7i.2xlarge"],
+        "labels": {"node-operator.io/role": "system"},
+        "scaling": {"min_size": 3, "desired_size": 3, "max_size": 3},
+        "availability_zones": ["ap-northeast-2a", "ap-northeast-2c"],
+        "public_ip_association": false,
+        "private_subnet_ids": ["subnet-private-a", "subnet-private-c"]
+      },
+      {
+        "address": "aws_eks_node_group.consensus",
+        "instance_types": ["m7i.2xlarge"],
+        "labels": {"node-operator.io/role": "consensus"},
+        "scaling": {"min_size": 0, "desired_size": 1, "max_size": 1},
+        "availability_zones": ["ap-northeast-2a", "ap-northeast-2c"],
+        "public_ip_association": false,
+        "private_subnet_ids": ["subnet-private-a", "subnet-private-c"]
+      },
+      {
+        "address": "aws_eks_node_group.execution",
+        "instance_types": ["m7i.4xlarge"],
+        "labels": {"node-operator.io/role": "execution"},
+        "scaling": {"min_size": 0, "desired_size": 1, "max_size": 1},
+        "availability_zones": ["ap-northeast-2a", "ap-northeast-2c"],
+        "public_ip_association": false,
+        "private_subnet_ids": ["subnet-private-a", "subnet-private-c"]
+      }
+    ],
+    "iam_policies": [
+      {
+        "address": "aws_iam_role_policy.node_observer",
+        "statements": [
+          {
+            "address": "aws_iam_role_policy.node_observer.statement[0]",
+            "effect": "Allow",
+            "actions": ["ec2:DescribeInstances", "eks:DescribeCluster"],
+            "resources": ["*"]
+          },
+          {
+            "address": "aws_iam_role_policy.node_observer.statement[1]",
+            "effect": "Allow",
+            "actions": ["s3:GetObject"],
+            "resources": ["arn:aws:s3:::node-operator-evidence/reports/approved-report.json"]
+          }
+        ]
+      }
+    ]
+  }
+}

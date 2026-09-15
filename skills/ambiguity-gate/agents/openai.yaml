@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ambiguity Gate"
+  short_description: "Resolve material forks with evidence and explicit approval"
+  default_prompt: "Use $ambiguity-gate to resolve this ambiguity under the repository protocol."
+policy:
+  allow_implicit_invocation: true

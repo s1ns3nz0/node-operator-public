@@ -1,0 +1,248 @@
+# Purpose: Evaluate trusted policy against PR evidence and publish exact-head checks; never execute control scripts from PR source.
+name: CI Evidence Gate
+
+on:
+  # Control code comes from the trusted default branch. PR source is read-only
+  # scanner/Terraform input; scoped check publication stays in trusted steps.
+  workflow_run:
+    workflows: [CI, CI Evidence Review Signal]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: evidence-gate-${{ github.event.workflow_run.pull_requests[0].number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  # Role: Resolve the current PR head and publish failure when the upstream CI run did not succeed.
+  upstream-failure:
+    name: Upstream Failure Gate
+    if: >-
+      github.event.workflow_run.name == 'CI' &&
+      github.event.workflow_run.conclusion != 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].number != null
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
+    env:
+      SUBJECT_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # Role: Fetch the resolver from the trusted workflow revision and bind the event to the current PR head.
+      - name: Trusted control-plane and current PR head
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          event_script="$RUNNER_TEMP/resolve-pr-evidence-context.sh"
+          gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci/resolve-pr-evidence-context.sh?ref=$GITHUB_SHA" --jq .content | base64 --decode > "$event_script"
+          chmod 0700 "$event_script"
+          "$event_script" "$GITHUB_EVENT_PATH" "$GITHUB_OUTPUT"
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.context.outputs.trusted_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # Role: Publish a failing check for this PR revision; do not treat failed upstream CI as missing work.
+      - name: Failed Exact-SHA Evidence Check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DETAILS_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          scripts/ci/publish-pr-evidence-check.sh "$SUBJECT_SHA" - "$DETAILS_URL"
+          # Publishing the failed check must not make this producer successful.
+          exit 1
+  # Role: Collect trusted head/base findings and Terraform evidence, add current reviews, evaluate OPA and publish a decision.
+  evidence-gate:
+    name: Pull Request Policy
+    if: >-
+      github.event.workflow_run.name == 'CI' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].number != null
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+      packages: read
+      checks: write
+      actions: read
+    env:
+      EVIDENCE_ROOT: ${{ github.workspace }}/.opa-evidence
+      SUBJECT_SHA: ${{ github.event.workflow_run.head_sha }}
+      BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
+      SCANNER_IMAGE: ghcr.io/s1ns3nz0/node-operator/security-scanners@sha256:b224334bb3b86a086dea3b11c1e8ad6e3b619dc350af3f9f54c4a85ba576f4c9
+      TERRAFORM_IMAGE: ghcr.io/s1ns3nz0/node-operator/terraform-validation@sha256:1f2ac75ec09b43b4a79eaaae94eca8f8f1655315a5aa81e7c80d3a8a14ac189a
+    steps:
+      # Role: Fetch the resolver from the trusted workflow revision and bind the event to the current PR head.
+      - name: Trusted control-plane and current PR head
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          event_script="$RUNNER_TEMP/resolve-pr-evidence-context.sh"
+          gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci/resolve-pr-evidence-context.sh?ref=$GITHUB_SHA" --jq .content | base64 --decode > "$event_script"
+          chmod 0700 "$event_script"
+          "$event_script" "$GITHUB_EVENT_PATH" "$GITHUB_OUTPUT"
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The policy engine and collector are a trusted control-plane input:
+          # never execute them from the untrusted pull-request checkout.
+          ref: ${{ steps.context.outputs.trusted_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      # Role: Check out PR source only as data for isolated validation, not as trusted gate code.
+      - name: Pull-request source as untrusted Terraform input
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.SUBJECT_SHA }}
+          path: .pr-source
+          fetch-depth: 0
+          persist-credentials: false
+      # Role: Check out the base revision only as data for baseline comparisons.
+      - name: Pull-request base as untrusted scanner input
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BASE_SHA }}
+          path: .base-source
+          fetch-depth: 0
+          persist-credentials: false
+      # Role: Reject PR attempts to replace the trusted scanner configuration.
+      - name: Scanner Policy Boundary
+        run: bash scripts/ci/workflows/reject-scanner-policy-replacement.sh
+      # Role: Collect PR findings using the gate's trusted collector and pinned scanner.
+      - name: Trusted PR Security Evidence
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+        run: bash scripts/ci/workflows/collect-head-security.sh
+      # Role: Install the selected OPA version for trusted policy evaluation.
+      - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1 # v2.4.0
+        with:
+          version: v1.17.0
+      # Role: Validate untrusted Terraform input in the pinned, network-isolated container.
+      - name: Terraform evidence using the trusted collector
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+        run: bash scripts/ci/workflows/collect-trusted-terraform.sh
+      # Role: Collect base findings and baseline context without implicitly exempting existing findings.
+      - name: Isolate newly introduced policy findings
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+        run: bash scripts/ci/workflows/collect-baseline-security.sh
+      # Role: Fetch changed paths and reviewers' latest approvals for the exact current head.
+      - name: Pull-request posture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr_number="$(jq -er '.workflow_run.pull_requests[0].number' "$GITHUB_EVENT_PATH")"
+          scripts/ci/collect-scm-posture.sh "$SUBJECT_SHA" "$EVIDENCE_ROOT/scm.json" "$pr_number"
+      # Role: Validate collector envelopes and assemble normalized evidence with current SCM and policy data.
+      - name: Evidence
+        run: scripts/ci/normalize-evidence.sh "$EVIDENCE_ROOT/policy-input" "$SUBJECT_SHA" "$EVIDENCE_ROOT/scm.json" "$EVIDENCE_ROOT/normalized/evidence.json"
+      # Role: Evaluate normalized evidence; retain the decision even when policy rejects it.
+      - name: OPA policy
+        id: policy
+        continue-on-error: true
+        run: scripts/ci/evaluate-policy.sh "$EVIDENCE_ROOT/normalized/evidence.json" "$EVIDENCE_ROOT/decision.json"
+      # Role: Prepare the normalized JSON decision and SARIF artifact files.
+      - name: Safe JSON and SARIF outputs
+        if: always()
+        run: scripts/ci/publish-evidence.sh "$EVIDENCE_ROOT/normalized/evidence.json" "$EVIDENCE_ROOT/decision.json" "$EVIDENCE_ROOT/published"
+      # Role: Bind reusable evidence to subject, base, trusted revision and originating run identifiers.
+      - name: Evidence Cache Context
+        if: always()
+        run: bash scripts/ci/workflows/write-review-cache-context.sh
+      # Role: Upload exact-head gate evidence and cache provenance for review and release consumers.
+      - name: Normalized policy outputs
+        # Bound metadata is generated only after complete normalized evidence exists.
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ci-evidence-gate-${{ env.SUBJECT_SHA }}
+          path: |
+            ${{ env.EVIDENCE_ROOT }}/published/evidence.json
+            ${{ env.EVIDENCE_ROOT }}/published/decision.json
+            ${{ env.EVIDENCE_ROOT }}/published/policy.sarif
+            ${{ env.EVIDENCE_ROOT }}/published/cache-context.json
+            ${{ env.EVIDENCE_ROOT }}/policy-input/baseline-summary.json
+          if-no-files-found: error
+          retention-days: 90
+      # Role: Publish the named PR check, failing closed on absent or rejected policy output.
+      - name: Exact-SHA Evidence Check
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DETAILS_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/ci/publish-pr-evidence-check.sh "$SUBJECT_SHA" "$EVIDENCE_ROOT/published/decision.json" "$DETAILS_URL"
+      # Role: Make the job fail when the published policy decision contains blocking requirements.
+      - name: OPA decision
+        if: always()
+        run: scripts/ci/verify-policy-decision.sh "$EVIDENCE_ROOT/published/decision.json"
+  # Role: Reuse only recent, provenance-checked gate evidence and reevaluate current reviews without rescanning.
+  review-refresh:
+    name: Review Policy Refresh
+    if: >-
+      github.event.workflow_run.name == 'CI Evidence Review Signal' &&
+      github.event.workflow_run.event == 'pull_request_review' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      checks: write
+    env:
+      EVIDENCE_ROOT: ${{ github.workspace }}/review-evidence
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      # Role: Validate artifact provenance, age and head/base bindings before reading cached evidence.
+      - name: Trusted Exact-SHA Evidence Cache
+        id: cache
+        run: python3 scripts/ci/refresh-review-evidence.py
+      # Role: Install the selected OPA version for trusted policy evaluation.
+      - uses: open-policy-agent/setup-opa@b2b258e089860efaadaaf71bf6e3aecb4a3eeff1
+        with:
+          version: v1.17.0
+      # Role: Refresh SCM posture and evaluate current policy without starting scanners or Terraform.
+      - name: Current Review Policy
+        id: review-policy
+        env:
+          SUBJECT_SHA: ${{ steps.cache.outputs.subject_sha }}
+          PR_NUMBER: ${{ steps.cache.outputs.pr_number }}
+        run: bash scripts/ci/workflows/evaluate-review-refresh.sh
+      # Role: Upload the review-specific decision separately from the original scanner cache.
+      - name: Review Decision and Evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ci-review-decision-${{ github.run_id }}
+          path: ${{ env.EVIDENCE_ROOT }}/published
+          if-no-files-found: warn
+          retention-days: 30
+      # Role: Recheck live PR bindings and publish failure unless evaluation completed successfully.
+      - name: Exact-SHA Review Check
+        if: always() && steps.cache.outputs.subject_sha != ''
+        env:
+          SUBJECT_SHA: ${{ steps.cache.outputs.subject_sha }}
+          PR_NUMBER: ${{ steps.cache.outputs.pr_number }}
+          EVALUATION_RESULT: ${{ steps.review-policy.outcome }}
+          DETAILS_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/ci/workflows/publish-review-refresh.sh

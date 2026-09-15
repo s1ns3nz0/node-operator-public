@@ -1,0 +1,8 @@
+aws_account_id = "123456789012"
+name           = "node-operator"
+
+# Leave unset for a new deployment. Set only after reviewing an existing
+# bootstrap-state import mapping, for example:
+# state_bucket_name = "node-operator-tfstate-123456789012-apne2"
+# baseline_state_key = "node-operator/t2/terraform.tfstate"
+# backend_principal_arns = ["arn:aws:iam::123456789012:role/terraform-backend"]

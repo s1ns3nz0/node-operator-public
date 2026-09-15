@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "purpose": "Local, unpublished CloudWatch Agent security-rebuild candidate",
+  "official_runtime": {
+    "image": "amazon/cloudwatch-agent@sha256:f5680928b37cd5afacb5fd3de1b7ef7bfba57976f4f8b4227b49615467460cf2",
+    "entrypoint": "/opt/aws/amazon-cloudwatch-agent/bin/start-amazon-cloudwatch-agent"
+  },
+  "source": {
+    "repository": "https://github.com/aws/amazon-cloudwatch-agent.git",
+    "commit": "7c48fecadbdb49314f123449fa2167361d307c10",
+    "release_version": "1.300071.0",
+    "upstream_go_directive": "1.25.8"
+  },
+  "builder": {
+    "registry": "docker.io/library",
+    "image": "golang",
+    "tag": "1.27.1",
+    "manifest_digest": "sha256:f44f6e88636cfb311f9ebace870ded69d943f227bb3cb27d32ffd84ea18c43ea",
+    "linux_amd64_image_digest": "sha256:b475798fb16158e6c38e8b5ca2d870fbeaa8b7fec0fc8ec64b3dc20966040635"
+  },
+  "module_updates": {
+    "new_import_bootstrap_pin": {
+      "module": "go.opentelemetry.io/collector/config/configoptional",
+      "version": "v0.128.0",
+      "reason": "The JMX backport introduces this import before closure discovery. Pin it before go-list to avoid resolving the latest version transiently; the official full-core map verifies the final selection."
+    },
+    "scan_requested": {
+      "golang.org/x/crypto": "v0.56.0",
+      "golang.org/x/net": "v0.56.0",
+      "golang.org/x/text": "v0.39.0",
+      "google.golang.org/grpc": "v1.83.1",
+      "github.com/prometheus/prometheus": "v0.311.3",
+      "github.com/apache/thrift": "v0.24.0",
+      "github.com/klauspost/compress": "v1.18.7"
+    },
+    "candidate_attempt": {
+      "github.com/prometheus/prometheus": "v0.305.3"
+    },
+    "candidate_rationale": "GHSA-wg65-39gg-5wfj names Prometheus v3.5.3 LTS (Go module v0.305.3) as fixed. This candidate keeps the Amazon receiver's AppendHistogramCTZeroSample interface and pairs the known Prometheus API changes with the official OTel v0.128/v1.34 core cohort.",
+    "otel_core_cohort": {
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-collector/v0.128.0/versions.yaml",
+      "path": "otel-v0.128-module-sets.yaml",
+      "sha256": "8a132206547abb244d1781f625cc337971b5e87e1871c0f0bcee82c8ba05b1fb",
+      "stable_version": "v1.34.0",
+      "beta_version": "v0.128.0",
+      "selection": "The Dockerfile derives the production-reachable go.opentelemetry.io/collector/* intersection from the three agent main packages, emits exact go get targets from this checked map, then rejects any final reachable core module that is unmapped or at a different version."
+    },
+    "otel_core_cohort_source": "The full official collector v0.128 module-set map replaces the prior partial six-module proposal. The Amazon Prometheus receiver package and focused JMX/resolver regressions now compile and pass; complete Agent compilation still fails in translator API consumers. This is not full compatibility or runtime proof.",
+    "legacy_expandconverter": {
+      "path": "legacy-expandconverter.lock",
+      "lock_sha256": "19681f3395929434cc5eea397f1bf73089cdd33c4f2be257b702735895549772",
+      "module": "go.opentelemetry.io/collector/confmap/converter/expandconverter",
+      "version": "v0.113.0",
+      "go_mod_sha256": "50656304c0edc68ab1a68ec0b9c95036587daf8aa9b4f82bc16313b802e6a20b",
+      "expand_go_sha256": "387f0bcb6826df11adb68289d3d9f6e29d5aea7207e8b1f1f976275d40bcad39",
+      "purpose": "Archived compatibility module retained outside the official v0.128 map to preserve existing bare-dollar, braced-dollar, and double-escape configuration behavior.",
+      "risk": "It imports a confmap internal package and is deprecated upstream. The lock is not an SCA waiver; the build validates the exact archive bytes and is configured to run resolver-chain regressions before compilation."
+    },
+    "actual_selected_during_v0_305_3_attempt": {
+      "github.com/prometheus/prometheus": "v0.305.3",
+      "go.opentelemetry.io/collector/component": "v1.34.0",
+      "go.opentelemetry.io/collector/confmap": "v1.34.0",
+      "go.opentelemetry.io/collector/pipeline": "v0.128.0",
+      "go.opentelemetry.io/collector/pipeline/xpipeline": "v0.124.0",
+      "go.opentelemetry.io/collector/service": "v0.124.0"
+    },
+    "v0_305_3_attempt_outcome": "Production dependency resolution and the hash-locked MetricFamily patch passed, but make build-for-docker-amd64 produced OTel/API compiler errors. The diagnostic build was intentionally canceled after those errors; no candidate image or passing scan exists.",
+    "prior_attempt_resolved": {
+      "golang.org/x/crypto": "v0.56.0",
+      "golang.org/x/net": "v0.57.0",
+      "golang.org/x/text": "v0.41.0",
+      "google.golang.org/grpc": "v1.83.1",
+      "github.com/prometheus/prometheus": "v0.311.3",
+      "github.com/apache/thrift": "v0.24.0",
+      "github.com/klauspost/compress": "v1.18.7"
+    },
+    "resolution_note": "The prior attempt selected x/net v0.57.0 and x/text v0.41.0 because x/crypto v0.56.0 requires them; the scan-proposed x/net v0.56.0 and x/text v0.39.0 cannot coexist with it. The v0.305.3 attempt resolved and compiled far enough to expose the recorded API errors, but it did not produce a candidate image."
+  },
+  "reviewed_patch": {
+    "path": "patches/prometheusreceiver-metric-family.patch",
+    "sha256": "c3b8f473b146cd5b7044fdc45c9bbc484c4ad068be9513fdfd62b6bb923561d5",
+    "module": "github.com/amazon-contributing/opentelemetry-collector-contrib/receiver/prometheusreceiver",
+    "module_version": "v0.0.0-20260717191209-ee093fbfffbd",
+    "preimages": {
+      "internal/metadata.go": "23f4e8697f83ecefc3d3aae33fc05a0617d16d3373155ffbefcecf9e5ec9e327",
+      "internal/metricfamily.go": "f65be0b69ee4ff5c9294d417b8634510c7ccee3bb473d666294e4eeedcd608fb",
+      "internal/transaction.go": "5f456ee16b91e756610dbdd604ac30c21c73a8ef31abea379b812dca3df6168a",
+      "targetallocator/manager.go": "fd745739940e3cf456840e390c3a4bf1fbb1fe0d2560c8f95e26826e29e2bf11"
+    },
+    "scope": "Six scrape.MetricMetadata literals and three created-series comparisons change Metric to MetricFamily. initTransaction passes an empty labels.Builder to the required DiscoveredLabels API without shadowing the labels package. The target allocator preserves its existing false-native-histogram behavior by assigning a true bool pointer. All other receiver code remains unchanged.",
+    "validation": "A networkless linux/amd64 run of local/cloudwatch-agent-tools:verified (derived from the verified Go builder and containing GNU patch 2.8) applied this exact patch with --batch --fuzz=0 to the checksum-bound receiver fixture. A deliberately modified transaction preimage was rejected at hunk 1. This is patch validation only, not a production compile."
+  },
+  "reviewed_jmx_patch": {
+    "path": "patches/jmxreceiver-configoptional.patch",
+    "sha256": "093728a3d68de9f20d6bb7e21c5366548391abaa74e4f023b01e7d3297ea914f",
+    "module": "github.com/amazon-contributing/opentelemetry-collector-contrib/receiver/jmxreceiver",
+    "module_version": "v0.0.0-20260717191209-ee093fbfffbd",
+    "preimage": {
+      "receiver.go": "9737f7f30b1fd0e3fa003ba8cdf68f39352932d1323641e38998360b25bc5ebe"
+    },
+    "upstream_reference": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-collector-contrib/v0.128.0/receiver/jmxreceiver/receiver.go",
+    "scope": "Initializes the OTel v0.128 optional gRPC protocol before setting the existing JMX endpoint and removes the old nil HTTP assignment. HTTP stays absent/disabled; the JMX receiver remains enabled.",
+    "validation": "Root GNU patch positive and tampered-preimage negative checks passed. Build nd1nlh1xogb70e0il2txavcqa executed TestConfigOptionalGRPCPreservesJMXEndpointAndDisablesHTTP successfully (package0.072s). This verifies optional helper/default-config semantics, not complete JMX receiver operation. The subsequent resolver package compile failed in Prometheus targetallocator."
+  },
+  "reviewed_tls_field_patch": {
+    "path": "patches/targetallocator-tls-field.patch",
+    "sha256": "1a9a9b67eafc139031f08512255cc7cba413d7138ec2a40d53734d81292a85b8",
+    "config_preimage": "2e0fc072d27e07d94d515b0bb24a7254705b9e15857ae77492238f0545429731",
+    "manager_post_prometheus_patch_preimage": "1cdebdd672a05532b7595576092825202a97fda651b5d43e0f67f9115877fe5e",
+    "scope": "All18 production TLSSetting references in targetallocator config and manager become TLS, matching confighttp0.128 ClientConfig. TLS input mappings and fork CA/cert/key file watchers remain intact.",
+    "validation": "Root networkless GNU2.8 fixture passed original apply, exact18 substitutions, watcher preservation and altered-config rejection. Build hyjzoku2mxcdl69w3cijfozzw compiled the targetallocator production package before the succeeding JMX test. No TLS runtime or full-image proof is claimed."
+  },
+  "reviewed_new_api_patch": {
+    "path": "patches/prometheus-new-api.patch",
+    "sha256": "87e993a6869906cb14ef642f9f46f3b26c9f7ee99a342bb7b60a3b19b5e35a2d",
+    "metrics_receiver_preimage": "0300f81650a05684ff378d81d15668c394d43fd14dcb784d7a308e4809f8ea82",
+    "scope": "Use api_v1.PrometheusVersion and pass ConvertOTLPDelta, NativeOTLPDeltaIngestion and CTZeroIngestionEnabled after EnableOTLPWriteReceiver, matching Prometheus0.305.3 canonical caller. Options are not enabled by this patch; LocalStorage remains the compatible TSDBAdminStats interface.",
+    "validation": "GNU2.8 positive and altered-preimage-negative fixtures passed. Current fork Options leaves write receivers disabled with nil Appendable; any future enabling needs a real Appendable. No runtime or full-image proof yet."
+  },
+  "compiler_cache": {
+    "id": "node-operator-cwa-go1271-amd64",
+    "target": "/root/.cache/go-build",
+    "scope": "Local locked compiler cache only; patched modules are deliberately not persisted. Final runtime and build-metadata copies exclude this cache. No remote cache publication."
+  },
+  "latest_local_attempt": {
+    "buildx_history_id": "obp0kzzr851spnw2jmi6tiqxx",
+    "invocation": "docker buildx build --platform linux/amd64 --pull=false --progress=plain --build-arg BUILDPLATFORM=linux/amd64 --build-arg GO_IMAGE=local/cloudwatch-go-builder:verified --load --tag local/cloudwatch-agent:1.300071.0-prometheus-0.305.3-candidate --file .ci/cloudwatch-agent/Dockerfile .ci/cloudwatch-agent",
+    "result": "Completed with Error on 2026-09-13T22:13:19Z. Full fork Prometheus receiver and Agent Prometheus plugin compiled; JMX regression passed (package0.065s), legacy resolver regression passed (package0.232s). Production Make used VersionStr=1.300071.0, then failed in four OTel translator files: removed configauth.Authentication, optional protocol fields, and TargetAllocator.TLSSetting. Make exit2; no candidate image or passing image scan."
+  },
+  "agent_prometheus_api_patch": {
+    "path": "patches/agent-prometheus-api.patch",
+    "sha256": "391df71072d838d66c77447bd4ecca4b667e52dbf625e1653d533411169f2592",
+    "source_commit": "7c48fecadbdb49314f123449fa2167361d307c10",
+    "preimages": {
+      "plugins/inputs/prometheus/target_allocator.go": "a66d2613eb6cd171e1bfa6d90acc665a31e236258fd19ac772491f051344f3a5",
+      "plugins/inputs/prometheus/metrics_receiver.go": "bdea2a14351f7717c9dc9afcf1bfce08dcbc23a12c64246f2668272be6bb1856",
+      "plugins/inputs/prometheus/metrics_type_handler.go": "380adb6b4578c1b69895317ba3cb14cbb6c47c203aba1d4de2e68411dc8d7482",
+      "plugins/inputs/prometheus/start.go": "cb47b97775443d030c02d39e66664325f2d2c76b3c3051d6e4e16adbec8f173c"
+    },
+    "scope": "Use initialized promslog Level/Format, opaque Labels Len/Range, a DiscoveredLabels builder, and the renamed TargetAllocator TLS field. Actual graph selects prometheus/common v0.65.0.",
+    "validation": "Root networkless GNU patch2.8 fixture exited0 for positive application and expected altered-preimage rejection. Actual build obp0kzzr851spnw2jmi6tiqxx compiled the plugin with CGO_ENABLED=0 and readonly trimpath flags. No runtime semantics or final-image approval is claimed."
+  },
+  "runtime_scope": [
+    "amazon-cloudwatch-agent",
+    "start-amazon-cloudwatch-agent",
+    "config-translator"
+  ],
+  "excluded": {
+    "docker_library_finding": "No fix was available at assessment time. It is neither deleted from the evidence nor waived; reachability remains for separate review."
+  }
+}

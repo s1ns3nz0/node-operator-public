@@ -1,0 +1,28 @@
+--- a/receiver.go
++++ b/receiver.go
+@@ -16,2 +16,4 @@
+-	"go.opentelemetry.io/collector/component"
+-	"go.opentelemetry.io/collector/config/confignet"
++	"go.opentelemetry.io/collector/component"
++	"go.opentelemetry.io/collector/config/confignet"
++	"go.opentelemetry.io/collector/config/configoptional"
++	"go.opentelemetry.io/collector/confmap"
+@@ -146,0 +149,11 @@
++// insertDefault initializes an absent configoptional.Optional from an empty
++// configuration map so its value can be configured programmatically.
++func insertDefault[T any](opt *configoptional.Optional[T]) error {
++	if opt.HasValue() {
++		return nil
++	}
++
++	empty := confmap.NewFromStringMap(map[string]any{})
++	return empty.Unmarshal(opt)
++}
++
+@@ -171,2 +184,4 @@
+-	config.GRPC.NetAddr = confignet.AddrConfig{Endpoint: endpoint, Transport: confignet.TransportTypeTCP}
+-	config.HTTP = nil
++	if err := insertDefault(&config.GRPC); err != nil {
++		return nil, err
++	}
++	config.GRPC.Get().NetAddr = confignet.AddrConfig{Endpoint: endpoint, Transport: confignet.TransportTypeTCP}

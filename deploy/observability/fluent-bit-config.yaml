@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validator-log-collector-config
+  namespace: validator-observability
+  labels:
+    app.kubernetes.io/component: validator-log-collector
+immutable: true
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush 1
+        Grace 30
+        Log_Level info
+        Parsers_File parsers.conf
+    [INPUT]
+        Name tail
+        Path /var/log/containers/*.log
+        Exclude_Path /var/log/containers/*validator-log-collector*.log
+        Tag kube.*
+        Mem_Buf_Limit 20MB
+        Skip_Long_Lines On
+        # Reassemble CRI fragments and strip their timestamp/stream prefix.
+        # EMF must reach CloudWatch as a JSON object, not a CRI text envelope.
+        multiline.parser cri
+        DB /buffers/tail.db
+    [FILTER]
+        Name kubernetes
+        Match kube.*
+        Kube_URL https://kubernetes.default.svc:443
+        Kube_Tag_Prefix kube.var.log.containers.
+        Merge_Log Off
+        Labels On
+        Annotations Off
+    [FILTER]
+        Name grep
+        Match kube.*
+        Regex $kubernetes['namespace_name'] ^(node-operator|validator-operations|vault|validator-observability)$
+    [FILTER]
+        Name rewrite_tag
+        Match kube.*
+        Rule $kubernetes['namespace_name'] ^vault$ vault.security false
+    [FILTER]
+        Name rewrite_tag
+        Match kube.*
+        Rule $kubernetes['namespace_name'] ^validator-observability$ observability false
+    [FILTER]
+        Name rewrite_tag
+        Match observability
+        # Retain the outer metadata record in workload logs as well.
+        Rule $kubernetes['labels']['app.kubernetes.io/component'] ^validator-chain-observer$ validator.metrics true
+    [FILTER]
+        Name grep
+        Match validator.metrics
+        # Status/error lines stay in workload logs, not the EMF route.
+        Regex log ^\{.*"_aws"[ ]*:
+    [OUTPUT]
+        Name cloudwatch_logs
+        Match_Regex ^(kube[.].*|observability)$
+        region ap-northeast-2
+        log_group_name /aws/eks/node-operator/validator-workloads
+        log_stream_prefix fluent-bit-
+        auto_create_group false
+    [OUTPUT]
+        Name cloudwatch_logs
+        Match validator.metrics
+        region ap-northeast-2
+        log_group_name /aws/eks/node-operator/validator-metrics
+        log_stream_prefix chain-observer-
+        log_key log
+        log_format json/emf
+        auto_create_group false
+    [OUTPUT]
+        Name cloudwatch_logs
+        Match vault.security
+        region ap-northeast-2
+        log_group_name /aws/eks/node-operator/validator-security
+        log_stream_prefix fluent-bit-
+        auto_create_group false
+  parsers.conf: |
+    [PARSER]
+        Name docker
+        Format json

@@ -1,0 +1,4 @@
+# Rego and manifest admission rules; requires pinned policy tools on PATH.
+scripts/ci/test-policy.sh
+scripts/ci/test-terraform-policy.sh
+scripts/ci/test-conftest.sh

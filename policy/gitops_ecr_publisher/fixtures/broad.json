@@ -1,0 +1,17 @@
+{
+  "publisher": {
+    "repository": "s1ns3nz0/node-operator",
+    "environment": "gitops-client-ecr-publish",
+    "audience": "sts.amazonaws.com"
+  },
+  "repository": {
+    "image_tag_mutability": "MUTABLE",
+    "scan_on_push": false,
+    "prevent_destroy": false
+  },
+  "permissions": [
+    {"name": "ecr:GetAuthorizationToken", "resource": "*"},
+    {"name": "ecr:PutImage", "resource": "*"},
+    {"name": "ecr:DeleteImage", "resource": "*"}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "Expire only explicitly disposable artifacts; retain release and signature tags",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPrefixList": ["disposable-"],
+        "countType": "imageCountMoreThan",
+        "countNumber": 10
+      },
+      "action": {"type": "expire"}
+    }
+  ]
+}

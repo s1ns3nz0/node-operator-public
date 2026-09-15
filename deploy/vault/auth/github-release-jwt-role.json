@@ -1,0 +1,23 @@
+{
+  "role_type": "jwt",
+  "bound_audiences": [
+    "https://vault.node-operator.internal"
+  ],
+  "user_claim": "repository_id",
+  "bound_claims_type": "glob",
+  "bound_claims": {
+    "repository": "s1ns3nz0/node-operator",
+    "repository_owner": "s1ns3nz0",
+    "ref_type": "tag",
+    "ref": "refs/tags/v*",
+    "workflow_ref": "s1ns3nz0/node-operator/.github/workflows/release-bundle.yml@refs/tags/v*"
+  },
+  "token_policies": [
+    "release-runner-dynamic-aws"
+  ],
+  "token_ttl": "15m",
+  "token_max_ttl": "15m",
+  "token_type": "batch",
+  "token_num_uses": 1,
+  "token_no_default_policy": true
+}

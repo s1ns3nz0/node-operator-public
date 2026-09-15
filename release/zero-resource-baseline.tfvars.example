@@ -1,0 +1,13 @@
+# The release command derives all VPC, subnet, route-table, and NAT IDs from
+# foundation-network. Do not add network_source, foundation_network, or
+# hoodi_nat_gateway_id to this file.
+aws_account_id = "123456789012"
+name           = "node-operator"
+
+enable_gitops_client_ecr_publisher      = true
+enable_temporary_ssm_ops_host            = false
+temporary_ssm_ops_host_termination_at    = ""
+enable_argocd_bootstrap_runner           = false
+enable_argocd_bootstrap_cluster_admin    = false
+enable_vault_bootstrap_runner            = false
+enable_vault_bootstrap_cluster_admin     = false

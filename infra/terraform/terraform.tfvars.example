@@ -1,0 +1,14 @@
+# Copy this file into an approved build-only input location. It contains no
+# credentials, access keys, secret values, or backend configuration.
+aws_account_id = "123456789012"
+name           = "node-operator"
+
+# All remaining values are intentionally pinned by the Terraform defaults and
+# validations: ap-northeast-2, 10.80.0.0/16, two private subnets, an always-on
+# one-node system pool for Argo CD and platform services, and one scale-to-zero
+# pool for each Hoodi client role.
+#
+# An authorized live apply for Hoodi workloads must supply the approved NAT
+# gateway that already serves the private subnets. Do not create a gateway in
+# this module or put a public endpoint on the EKS API.
+# hoodi_nat_gateway_id = "nat-0123456789abcdef0"

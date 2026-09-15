@@ -1,0 +1,29 @@
+# This schema is a non-secret audit-record contract. Store actual incident and
+# handover evidence in the approved immutable audit system, not this ConfigMap.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validator-operations-evidence-contract
+  namespace: validator-operations
+  labels:
+    app.kubernetes.io/part-of: hoodi-validator
+immutable: true
+data:
+  failover-required-fields: |
+    incident_id
+    validator_set_id
+    previous_holder_id
+    replacement_holder_id
+    fence_evidence_id
+    slashing_export_sha256
+    slashing_import_sha256
+    verifier_approval_id
+    completed_at_utc
+  compromise-or-exit-required-fields: |
+    incident_id
+    validator_set_id
+    signer_identity_revocation_evidence_id
+    fence_evidence_id
+    audit_correlation_id
+    recovery_or_exit_approval_id
+    completed_at_utc

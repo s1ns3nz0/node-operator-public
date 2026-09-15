@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "helm_archives": [
+    {
+      "name": "vault",
+      "version": "0.31.0",
+      "source": "https://helm.releases.hashicorp.com/vault-0.31.0.tgz",
+      "sha256": "fe80fae6a8838c75da9fbde1398f2c10bb4b5c31c425e559507ba99373297de2",
+      "ecrManifestDigest": "sha256:85cfa6b40396a198a104fbf06c7cccaf75428db7201394f9061c272441bcd0e4",
+      "destination": "vault",
+      "ecrTag": "0.31.0",
+      "purpose": "HashiCorp Vault Helm chart 0.31.0"
+    },
+    {
+      "name": "cert-manager",
+      "version": "v1.21.1",
+      "source": "https://charts.jetstack.io/charts/cert-manager-v1.21.1.tgz",
+      "sha256": "c27101f3f3e2349fb4a9e704316105bf7b52ad73b8c8257d3498ef7f2f6a4adc",
+      "ecrManifestDigest": "sha256:62c4745561eccfd723678c6547500750ebef5a880d81ff670d33124ab335f877",
+      "destination": "cert-manager",
+      "ecrTag": "v1.21.1",
+      "purpose": "cert-manager Helm chart v1.21.1, signed by the cert-manager maintainers"
+    }
+  ],
+  "artifacts": [
+    {
+      "source": "ghcr.io/kyverno/charts/kyverno@sha256:61d8cd025a27bd2962e1a6daf40fc98218a97ca2164f1184d14f41d40db84efa",
+      "destination": "charts",
+      "ecrTag": "3.8.1",
+      "purpose": "Kyverno Helm chart 3.8.1"
+    },
+    {
+      "source": "ghcr.io/kyverno/kyvernopre@sha256:e4f0f36f8a8c18427394894274278a94dbef5afefed915e38cf74f5a04cf9d64",
+      "destination": "nodes",
+      "ecrTag": "e4f0f36f8a8c18427394894274278a94dbef5afefed915e38cf74f5a04cf9d64",
+      "purpose": "Kyverno preflight controller image v1.18.1"
+    },
+    {
+      "source": "ghcr.io/kyverno/kyverno@sha256:90ca6e44900da3471732b6954039505fb7348862496fea3f51f7859bdf93e508",
+      "destination": "nodes",
+      "ecrTag": "90ca6e44900da3471732b6954039505fb7348862496fea3f51f7859bdf93e508",
+      "purpose": "Kyverno admission controller image v1.18.1"
+    },
+    {
+      "source": "ghcr.io/kyverno/background-controller@sha256:071724e5ed7901633e068aa928dc4e00ae486a500f6bfb38cdb48491d6e83bca",
+      "destination": "nodes",
+      "ecrTag": "071724e5ed7901633e068aa928dc4e00ae486a500f6bfb38cdb48491d6e83bca",
+      "purpose": "Kyverno background controller image v1.18.1"
+    },
+    {
+      "source": "ghcr.io/kyverno/cleanup-controller@sha256:323bb87053050889e5e84b3281fd0a8c723aed6a11ad3a069dd467597d030038",
+      "destination": "nodes",
+      "ecrTag": "323bb87053050889e5e84b3281fd0a8c723aed6a11ad3a069dd467597d030038",
+      "purpose": "Kyverno cleanup controller image v1.18.1"
+    },
+    {
+      "source": "ghcr.io/kyverno/reports-controller@sha256:a854a474fe5c8e71ddc5371d575faecf62f2e582482bfd90e221660a9818c9e0",
+      "destination": "nodes",
+      "ecrTag": "a854a474fe5c8e71ddc5371d575faecf62f2e582482bfd90e221660a9818c9e0",
+      "purpose": "Kyverno reports controller image v1.18.1"
+    },
+    {
+      "source": "ghcr.io/kyverno/readiness-checker@sha256:65a64df8e8cbbee7f1b679843d688c5e4bca50898a4ba59a5b12b8e79797f1bc",
+      "destination": "nodes",
+      "ecrTag": "65a64df8e8cbbee7f1b679843d688c5e4bca50898a4ba59a5b12b8e79797f1bc",
+      "purpose": "Kyverno readiness checker image v1.18.1"
+    },
+    {
+      "source": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-nodes@sha256:9dbbfdb7948a996674d0a99304460ab93863692ce40e62feb64dc2fc7ed6a8e6",
+      "destination": "nodes",
+      "ecrTag": "9dbbfdb7948a996674d0a99304460ab93863692ce40e62feb64dc2fc7ed6a8e6",
+      "purpose": "Reviewed Kyverno CLI v1.19.1 built from 40ec788d48bb28d83dbf85538e962a59db9d45c6"
+    },
+    {
+      "source": "nethermind/nethermind@sha256:ec5f6c8158dbf82d4ddbd5500f895c930f52aa3b4c998148d9e1b452793d828e",
+      "destination": "nodes",
+      "ecrTag": "ec5f6c8158dbf82d4ddbd5500f895c930f52aa3b4c998148d9e1b452793d828e",
+      "purpose": "Nethermind Hoodi execution client 1.39.3-chiseled"
+    },
+    {
+      "source": "offchainlabs/prysm-beacon-chain@sha256:49f8454eb2a756402eb781025e370eef7d613668c2914bad4cca9c1aa11fafa4",
+      "destination": "nodes",
+      "ecrTag": "49f8454eb2a756402eb781025e370eef7d613668c2914bad4cca9c1aa11fafa4",
+      "purpose": "Prysm Hoodi consensus client v7.1.8"
+    },
+    {
+      "source": "ghcr.io/argoproj/argo-helm/argo-cd@sha256:8ff18ee7a22670305555167ea31f24a88e2f912cf0a872f852e1880886d4c308",
+      "destination": "argocd",
+      "ecrTag": "10.4.0",
+      "purpose": "Argo CD Helm chart 10.4.0"
+    },
+    {
+      "source": "quay.io/argoproj/argocd@sha256:0deb1a1c917629b960ead995ae3b6069450a866992676599658687ef9a641ee8",
+      "destination": "argocd",
+      "ecrTag": "0deb1a1c917629b960ead995ae3b6069450a866992676599658687ef9a641ee8",
+      "purpose": "Argo CD core image v3.5.1"
+    },
+    {
+      "source": "ghcr.io/dexidp/dex@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462",
+      "destination": "argocd",
+      "ecrTag": "8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462",
+      "purpose": "Dex image v2.45.1"
+    },
+    {
+      "source": "public.ecr.aws/docker/library/redis@sha256:2cc044fc5a07c9b701f8f1255a309ae9ad7856e694ac03513bf3648c01e40763",
+      "destination": "argocd",
+      "ecrTag": "2cc044fc5a07c9b701f8f1255a309ae9ad7856e694ac03513bf3648c01e40763",
+      "purpose": "Redis image 8.6.4-alpine"
+    },
+    {
+      "source": "ghcr.io/s1ns3nz0/node-operator/argocd-bootstrap@sha256:0e2c0f21b1d68945b2470a3a13f675ae205b06edc5e543d222105aa7fffbfa6f",
+      "destination": "argocd",
+      "ecrTag": "0e2c0f21b1d68945b2470a3a13f675ae205b06edc5e543d222105aa7fffbfa6f",
+      "purpose": "Private Argo CD bootstrap toolchain for commit 8a453d8"
+    },
+    {
+      "source": "docker.io/hashicorp/vault@sha256:268bb80aa9c6d13d65fcfa05c0c268caca068952240a8087291a6ce0b66e3a10",
+      "destination": "vault",
+      "ecrTag": "268bb80aa9c6d13d65fcfa05c0c268caca068952240a8087291a6ce0b66e3a10",
+      "purpose": "Vault server and agent image 1.20.4 for chart 0.31.0"
+    },
+    {
+      "source": "docker.io/hashicorp/vault-k8s@sha256:8c18ccc87fd72930fd0c3f12ea444e9e57e83f119b93c546ed047aba29a05c5f",
+      "destination": "vault",
+      "ecrTag": "8c18ccc87fd72930fd0c3f12ea444e9e57e83f119b93c546ed047aba29a05c5f",
+      "purpose": "Vault injector image 1.7.0 for chart 0.31.0"
+    },
+    {
+      "source": "ghcr.io/s1ns3nz0/node-operator/vault-bootstrap@sha256:463fcfbf77bfb45f59484ca3381e5cc7b068af9123ac522112ff25e625575e87",
+      "destination": "vault",
+      "ecrTag": "463fcfbf77bfb45f59484ca3381e5cc7b068af9123ac522112ff25e625575e87",
+      "purpose": "Private Vault bootstrap toolchain for commit 005e535"
+    },
+    {
+      "source": "ghcr.io/s1ns3nz0/node-operator/vault-bootstrap@sha256:368207757bc326be0cc12228853897564676ddc35a44837505830c17e374337c",
+      "destination": "vault",
+      "ecrTag": "368207757bc326be0cc12228853897564676ddc35a44837505830c17e374337c",
+      "purpose": "Private Vault bootstrap toolchain containing the mTLS Raft retry_join contract"
+    },
+    {
+      "source": "ghcr.io/s1ns3nz0/node-operator/vault-bootstrap@sha256:3b1a51db37d105de0ed8229b707d12d4188a7c06ebe389c8d151e47c686f4dd9",
+      "destination": "vault",
+      "ecrTag": "3b1a51db37d105de0ed8229b707d12d4188a7c06ebe389c8d151e47c686f4dd9",
+      "purpose": "Private Vault bootstrap toolchain pinning Vault Agent injection to the private ECR mirror"
+    },
+    {
+      "source": "ghcr.io/s1ns3nz0/node-operator/vault-bootstrap@sha256:2fb3d5c45851a592254a912b5d630b0d3507559d767779ddfdcc280a686602ff",
+      "destination": "vault",
+      "ecrTag": "2fb3d5c45851a592254a912b5d630b0d3507559d767779ddfdcc280a686602ff",
+      "purpose": "Private Vault bootstrap toolchain using the Vault binary for injected agents"
+    },
+    {
+      "source": "quay.io/jetstack/cert-manager-controller@sha256:416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a",
+      "destination": "cert-manager",
+      "ecrTag": "416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a",
+      "purpose": "cert-manager controller v1.21.1"
+    },
+    {
+      "source": "quay.io/jetstack/cert-manager-webhook@sha256:d8b3961b51c8c7320633f8208dc46bf88aa13804d0f7cbe48a096b2c523cee42",
+      "destination": "cert-manager",
+      "ecrTag": "d8b3961b51c8c7320633f8208dc46bf88aa13804d0f7cbe48a096b2c523cee42",
+      "purpose": "cert-manager webhook v1.21.1"
+    },
+    {
+      "source": "quay.io/jetstack/cert-manager-cainjector@sha256:ccf6b919ec0500745a47a910118f834f9636d0aac1ff221245cd2557ed8c7c98",
+      "destination": "cert-manager",
+      "ecrTag": "ccf6b919ec0500745a47a910118f834f9636d0aac1ff221245cd2557ed8c7c98",
+      "purpose": "cert-manager CA injector v1.21.1"
+    },
+    {
+      "source": "quay.io/jetstack/cert-manager-startupapicheck@sha256:d8ab6416e6e7303a86fa0a8daa82c94a8001f21c9d78eb2e7db20534e5d07ae8",
+      "destination": "cert-manager",
+      "ecrTag": "d8ab6416e6e7303a86fa0a8daa82c94a8001f21c9d78eb2e7db20534e5d07ae8",
+      "purpose": "cert-manager startup API check v1.21.1"
+    }
+  ]
+}

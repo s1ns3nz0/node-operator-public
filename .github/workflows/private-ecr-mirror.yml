@@ -1,0 +1,256 @@
+# Purpose: Copy one approved artifact family to private ECR; preserve each target's own identity and validation.
+name: Mirror Private ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Approved artifact family to mirror
+        required: true
+        type: choice
+        options: [signer, gitops, private-dast, validator-client, validator-log-collector, validator-runtime, vault-chart, cert-manager-chart]
+      source:
+        description: Immutable source reference (required for signer, gitops, validator-client and validator-log-collector)
+        required: false
+        type: string
+      destination:
+        description: Destination for gitops only
+        required: false
+        type: choice
+        options: [none, argocd, charts, nodes, vault, cert-manager]
+        default: none
+
+permissions:
+  contents: read
+
+jobs:
+  # Role: Reject unsupported targets, non-main dispatches and invalid source/destination combinations before AWS access.
+  preflight:
+    name: Mirror Input Contract
+    runs-on: ubuntu-24.04
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      # Role: Validate target and immutable-source input shape before any mirror job acquires AWS credentials.
+      - name: Target and Input Validation
+        env:
+          MIRROR_TARGET: ${{ inputs.target }}
+          SOURCE: ${{ inputs.source }}
+          DESTINATION: ${{ inputs.destination }}
+        run: python3 scripts/ci/validate-private-ecr-inputs.py
+  # Role: Copy an allowlisted Prysm validator digest using the validator-client mirror role.
+  validator-client:
+    name: Validator Client Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'validator-client' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: validator-client-ecr-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      # Role: Validate the Prysm allowlist, copy the digest and check destination digest equality.
+      - name: Reviewed Prysm digest to private ECR
+        env:
+          SOURCE_IMAGE: ${{ inputs.source }}
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ROLE_ARN: ${{ vars.VALIDATOR_CLIENT_ECR_MIRROR_ROLE_ARN }}
+        run: bash scripts/release/mirror-validator-client.sh
+  # Role: Validate the reviewed OCI source/destination pair and mirror it using the GitOps role.
+  gitops:
+    name: Gitops Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'gitops' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: gitops-oci-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      # Role: Resolve a reviewed source/destination pair and its approved ECR tag.
+      - name: Approved digest input
+        env:
+          SOURCE: ${{ inputs.source }}
+          DESTINATION: ${{ inputs.destination }}
+        run: bash scripts/release/validate-gitops-source.sh
+      # Role: Exchange GitHub OIDC for the scoped GitOps mirror credentials.
+      - name: ECR mirror role
+        env:
+          AWS_ROLE_ARN: ${{ vars.GITOPS_OCI_MIRROR_ROLE_ARN }}
+          AWS_REGION: ap-northeast-2
+        run: bash scripts/release/assume-gitops-mirror-role.sh
+      # Role: Copy the reviewed OCI artifact and record its private reference.
+      - name: Approved OCI digest to private ECR
+        env:
+          SOURCE: ${{ inputs.source }}
+          DESTINATION: ${{ inputs.destination }}
+          ECR_TAG: ${{ env.ECR_TAG }}
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          MIRROR_TOOL_IMAGE: ${{ vars.GITOPS_OCI_MIRROR_TOOL_IMAGE }}
+        run: bash scripts/release/mirror-gitops-artifact.sh
+  # Role: Mirror the reviewed runtime image allowlist through its dedicated ECR role.
+  validator-runtime:
+    name: Validator Runtime Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'validator-runtime' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: validator-runtime-ecr-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Role: Copy only runtime images listed in the repository's approved input set.
+      - name: Reviewed runtime digests to private ECR
+        env:
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ROLE_ARN: ${{ vars.VALIDATOR_RUNTIME_ECR_MIRROR_ROLE_ARN }}
+        run: bash scripts/release/mirror-validator-runtime.sh
+  # Role: Check reviewed Vault chart integrity and publish its OCI representation to private ECR.
+  vault-chart:
+    name: Vault Chart Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'vault-chart' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: gitops-oci-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      # Role: Install the selected Helm version for reviewed chart packaging and OCI operations.
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with: {version: v3.17.3}
+      # Role: Validate the reviewed chart input and publish it through the scoped GitOps role.
+      - name: Vault Chart Integrity and Mirror
+        env:
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ROLE_ARN: ${{ vars.GITOPS_OCI_MIRROR_ROLE_ARN }}
+        run: bash scripts/release/mirror-vault-chart.sh
+  # Role: Validate and mirror the approved DAST scanner image; this does not execute a DAST scan.
+  private-dast:
+    name: Private Dast Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'private-dast' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: private-dast-ecr-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
+      # Role: Check the immutable DAST scanner selection before acquiring mirror credentials.
+      - name: Reviewed scanner allowlist
+        run: scripts/ci/verify-private-dast-scanner.sh .ci/dast/approved-scanner.json
+      # Role: Exchange GitHub OIDC for the dedicated DAST mirror role.
+      - name: Private DAST mirror identity
+        env:
+          AWS_REGION: ap-northeast-2
+          AWS_ROLE_ARN: ${{ vars.PRIVATE_DAST_ECR_MIRROR_ROLE_ARN }}
+        run: scripts/ci/assume-private-dast-mirror-role.sh
+      # Role: Copy the selected scanner image; do not scan runtime targets.
+      - name: Approved scanner digest into immutable private ECR
+        env:
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+        run: scripts/ci/mirror-private-dast-scanner.sh .ci/dast/approved-scanner.json
+  # Role: Check reviewed cert-manager chart integrity and publish its OCI representation to private ECR.
+  cert-manager-chart:
+    name: Cert Manager Chart Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'cert-manager-chart' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: gitops-oci-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      # Role: Install the selected Helm version for reviewed chart packaging and OCI operations.
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with: {version: v3.17.3}
+      # Role: Validate the reviewed cert-manager chart input and publish its private OCI copy.
+      - name: cert-manager Chart Integrity and Mirror
+        env:
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ROLE_ARN: ${{ vars.GITOPS_OCI_MIRROR_ROLE_ARN }}
+        run: bash scripts/release/mirror-cert-manager-chart.sh
+  # Role: Require an immutable Fluent Bit source in the expected repository and mirror it to ECR.
+  validator-log-collector:
+    name: Validator Log Collector Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'validator-log-collector' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: validator-log-collector-ecr-mirror
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      # Role: Copy an immutable source from the expected Fluent Bit repository and record the private digest.
+      - name: Reviewed Fluent Bit digest to private ECR
+        env:
+          SOURCE_IMAGE: ${{ inputs.source }}
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ROLE_ARN: ${{ vars.VALIDATOR_LOG_COLLECTOR_ECR_MIRROR_ROLE_ARN }}
+        run: bash scripts/release/mirror-validator-log-collector.sh
+  # Role: Validate the Vault release-signer source and copy it from GHCR to the dedicated ECR repository.
+  signer:
+    name: Signer Mirror
+    needs: [preflight]
+    if: github.ref == 'refs/heads/main' && inputs.target == 'signer' && needs.preflight.result == 'success'
+    runs-on: ubuntu-24.04
+    environment: ecr-signer-mirror
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    steps:
+      # Role: Retrieve the configured source revision without persisting checkout credentials.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Role: Require the expected Vault release-signer GHCR repository and immutable digest.
+      - name: Approved signer source
+        env:
+          SOURCE: ${{ inputs.source }}
+        run: bash scripts/release/validate-signer-source.sh
+      # Role: Acquire only the dedicated signer-image mirror role.
+      - name: Private ECR mirror role
+        env:
+          AWS_REGION: ap-northeast-2
+          AWS_ROLE_ARN: ${{ vars.ECR_SIGNER_MIRROR_ROLE_ARN }}
+        run: bash scripts/release/assume-signer-mirror-role.sh
+      # Role: Copy the validated signer image using the target's private registry permissions.
+      - name: Approved image to private ECR
+        env:
+          AWS_REGION: ap-northeast-2
+          ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          SOURCE: ${{ inputs.source }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+        run: bash scripts/release/mirror-signer-image.sh

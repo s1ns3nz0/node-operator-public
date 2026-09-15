@@ -1,0 +1,23 @@
+{
+  "schema_version": "v1",
+  "execution": {
+    "mode": "source-only",
+    "live_scan_authorized": false,
+    "required_approval": "separate-private-deployment-task"
+  },
+  "scanner": {
+    "image": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator/dast-zap-baseline@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "profile": "baseline-passive"
+  },
+  "target": {
+    "url": "http://node-operator-dast.node-operator.svc.cluster.local:8080",
+    "approved_private_target": true
+  },
+  "scope": {
+    "methods": ["GET"],
+    "paths": ["/healthz"],
+    "max_paths": 1,
+    "max_requests": 10,
+    "max_duration_seconds": 120
+  }
+}

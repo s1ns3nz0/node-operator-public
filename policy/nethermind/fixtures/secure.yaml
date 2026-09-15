@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nethermind-execution
+spec:
+  template:
+    spec:
+      serviceAccountName: nethermind-execution
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: {app.kubernetes.io/name: prysm-beacon}
+      containers:
+        - name: nethermind
+          image: nethermind/nethermind@sha256:ec5f6c8158dbf82d4ddbd5500f895c930f52aa3b4c998148d9e1b452793d828e
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities: {drop: [ALL]}
+          startupProbe: {tcpSocket: {port: p2p-tcp}}
+          readinessProbe: {tcpSocket: {port: p2p-tcp}}
+          livenessProbe: {tcpSocket: {port: p2p-tcp}}
+  volumeClaimTemplates:
+    - metadata: {name: nethermind-data}
+      spec:
+        storageClassName: nethermind-hoodi-gp3-kms
+        resources: {requests: {storage: 2Ti}}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata: {name: nethermind-hoodi-gp3-kms}
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  iops: "10000"
+  throughput: "250"
+  encrypted: "true"
+  kmsKeyId: alias/node-operator-baseline-ebs
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-nethermind-dns}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: nethermind}}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}]

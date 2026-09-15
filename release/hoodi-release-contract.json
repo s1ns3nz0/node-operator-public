@@ -1,0 +1,28 @@
+{
+  "schema_version": "v1",
+  "name": "node-operator-hoodi",
+  "network": "hoodi",
+  "region": "ap-northeast-2",
+  "client_chart": {
+    "name": "node-operator-client",
+    "version_pattern": "^0\\.1\\.[0-9]+$",
+    "immutable_digest_required": true
+  },
+  "bootstrap": {
+    "interactive_infrastructure_schema": 1,
+    "interactive_ops_access_schema": 1,
+    "interactive_ops_verify_schema": 1,
+    "entrypoint": "source/scripts/release/hoodi-validator-release.sh",
+    "supported_commands": ["verify", "interactive prepare", "interactive deploy", "interactive custody", "infrastructure apply", "deploy apply", "custody apply", "evidence signer", "evidence beacon", "activate apply", "ops-inputs prepare", "ops-access plan", "ops-access apply", "stage plan", "stage apply", "stage verify"],
+    "requires": ["AWS credentials for the approved account", "Terraform", "a reviewed non-secret tfvars file"],
+    "forbidden_inputs": ["Kubernetes Secret data", "Vault token", "Vault recovery material", "validator private key or keystore", "withdrawal credential"]
+  },
+  "post_bootstrap_gates": [
+    "Create the local-state bootstrap backend, then foundation-network before the baseline.",
+    "Publish and verify immutable private GitOps OCI artifacts.",
+    "Run the separately approved private Argo CD bootstrap path.",
+    "Promote the pinned client Application revision and verify Argo health.",
+    "The deploy apply command stages non-secret validator runtime, client, and fence workloads at zero replicas after private EKS access is established.",
+    "Vault, custody, deposit, and validator activation remain distinct operator ceremonies."
+  ]
+}

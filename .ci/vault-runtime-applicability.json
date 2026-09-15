@@ -1,0 +1,34 @@
+{
+  "schema_version":"v1",
+  "advisory_id":"GO-2026-5932",
+  "advisory_url":"https://vuln.go.dev/ID/GO-2026-5932.json",
+  "advisory_sha256":"10f20872fdf96e411dc7cc075492a02a85ec39e4a1d2623030bb9328cd043852",
+  "affected_package_prefix":"golang.org/x/crypto/openpgp",
+  "expires_at":"2026-10-09T00:00:00Z",
+  "candidates":{
+    "server":{
+      "digest":"sha256:8fbe048a50769523a577be1fd41fe7f476e1bda4a345cf25874da6426ac25e49",
+      "binary_path":"/bin/vault",
+      "binary_sha256":"b81dd1d983442df3e55d7b7ffa23daae178928d5ad1213be5680fb98c3507153",
+      "dependency_path":"/usr/share/vault/dependencies.txt",
+      "dependency_sha256":"6e810e887ea958c6e1d711696afe9de28a5c1c0b9b0c26d9be1626ae5ae59029",
+      "dependency_count":2635
+    },
+    "agent":{
+      "digest":"sha256:dc2c7c7b9a5b312605458422749a399420ad1ac60af5b7fb25b14e299cceaf23",
+      "binary_path":"/usr/local/bin/vault",
+      "binary_sha256":"ac711ff251eeef7e15af586cc7c00d86348a9c3460dc71b0ecd0b2afd9de5fa1",
+      "dependency_path":null,
+      "dependency_sha256":"386770b26b88aa34397b273497a955a6ecb782fc5d66f32f5302072dd13f9d63",
+      "dependency_count":1973
+    },
+    "injector":{
+      "digest":"sha256:2937fbc5d368430d089b9b94f82b44baab71524d166358bb8ea48f7b395152d4",
+      "binary_path":"/bin/vault-k8s",
+      "binary_sha256":"b4fdaed8f21d246ec678c140a563cd5ead6e199ebda496a6cc17149cd6deaa66",
+      "dependency_path":"/usr/share/vault-k8s/dependencies.txt",
+      "dependency_sha256":"386a10ffc95c61df38e7771283bad26e753ff102279f6849f10ebdafe4b6861b",
+      "dependency_count":786
+    }
+  }
+}

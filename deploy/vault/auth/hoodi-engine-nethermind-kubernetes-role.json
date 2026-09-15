@@ -1,0 +1,10 @@
+{
+  "role_type": "jwt",
+  "bound_service_account_names": ["nethermind-execution"],
+  "bound_service_account_namespaces": ["node-operator"],
+  "audience": "vault",
+  "token_policies": ["hoodi-engine-api"],
+  "token_ttl": "5m",
+  "token_max_ttl": "10m",
+  "token_no_default_policy": true
+}

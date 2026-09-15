@@ -1,0 +1,6 @@
+**
+!.ci/
+!.ci/prysm-mtls/
+!.ci/prysm-mtls/patches/
+!.ci/prysm-mtls/patches/0001-web3signer-http-mtls.patch
+!.ci/prysm-mtls/patches/0002-security-dependencies.patch

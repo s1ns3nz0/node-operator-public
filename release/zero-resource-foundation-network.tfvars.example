@@ -1,0 +1,5 @@
+# Fresh network ownership for a new deployment. Existing-mode imports are not
+# part of the one-command zero-resource path.
+aws_region   = "ap-northeast-2"
+name         = "node-operator"
+network_mode = "fresh"

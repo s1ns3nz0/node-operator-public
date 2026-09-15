@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: kyverno-no-volumes, namespace: node-operator}
+spec:
+  securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  containers:
+    - name: app
+      image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-dast-zap-baseline@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}, privileged: false, readOnlyRootFilesystem: true, runAsNonRoot: true}
+      resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {cpu: 100m, memory: 128Mi}}

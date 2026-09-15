@@ -1,0 +1,9 @@
+--- a/metrics_receiver.go
++++ b/metrics_receiver.go
+@@ -326 +326 @@
+-		&web.PrometheusVersion{
++		&api_v1.PrometheusVersion{
+@@ -341,0 +342,3 @@
++		o.ConvertOTLPDelta,
++		o.NativeOTLPDeltaIngestion,
++		o.CTZeroIngestionEnabled,

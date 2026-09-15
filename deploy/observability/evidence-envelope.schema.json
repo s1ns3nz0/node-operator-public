@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Node Operator validator lifecycle evidence envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_type", "collected_at_utc", "correlation_id", "network", "validator_set", "validator_public_key", "source", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_type": {"enum": ["uc-1", "uc-2", "uc-3", "uc-4", "uc-5", "archive-manifest", "source-disagreement"]},
+    "collected_at_utc": {"type": "string", "format": "date-time"},
+    "correlation_id": {"type": "string", "pattern": "^[a-f0-9-]{16,64}$"},
+    "network": {"const": "hoodi"},
+    "validator_set": {"type": "string", "pattern": "^hoodi-[a-z0-9][a-z0-9-]*$"},
+    "validator_public_key": {"type": "string", "pattern": "^0x[0-9a-fA-F]{96}$"},
+    "source": {"enum": ["private-beacon", "vault-audit", "kubernetes", "etherscan", "public-rpc", "beaconcha-in", "archive"]},
+    "payload": {"type": "object"}
+  },
+  "not": {
+    "anyOf": [
+      {"required": ["mnemonic"]}, {"required": ["keystore"]}, {"required": ["password"]},
+      {"required": ["token"]}, {"required": ["recovery_key"]}, {"required": ["kubeconfig"]},
+      {"required": ["aws_secret_access_key"]}
+    ]
+  }
+}

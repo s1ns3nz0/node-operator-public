@@ -1,0 +1,83 @@
+# The cert-manager v1.21.1 chart itself is mirrored to the private ECR OCI
+# repository before this file is used. Every scheduled image is an immutable
+# ECR tag plus the source/ECR manifest digest; the digest is authoritative.
+crds:
+  enabled: true
+  keep: true
+
+global:
+  leaderElection:
+    namespace: cert-manager
+  revisionHistoryLimit: 1
+
+# This portfolio cluster only uses the namespaced Vault internal CA. It has no
+# ACME issuer or Prometheus dependency.
+prometheus:
+  enabled: false
+
+image:
+  repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-cert-manager
+  tag: 416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a
+  digest: sha256:416a2d76870d996460e62bd7f521bf14fa017be9e3e904aab92163a331fcb61a
+  pullPolicy: IfNotPresent
+resources:
+  requests: {cpu: "100m", memory: "128Mi"}
+  limits: {cpu: "500m", memory: "512Mi"}
+securityContext:
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: ["ALL"]}
+
+webhook:
+  image:
+    repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-cert-manager
+    tag: d8b3961b51c8c7320633f8208dc46bf88aa13804d0f7cbe48a096b2c523cee42
+    digest: sha256:d8b3961b51c8c7320633f8208dc46bf88aa13804d0f7cbe48a096b2c523cee42
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: "100m", memory: "128Mi"}
+    limits: {cpu: "500m", memory: "512Mi"}
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}
+
+cainjector:
+  image:
+    repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-cert-manager
+    tag: ccf6b919ec0500745a47a910118f834f9636d0aac1ff221245cd2557ed8c7c98
+    digest: sha256:ccf6b919ec0500745a47a910118f834f9636d0aac1ff221245cd2557ed8c7c98
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: "100m", memory: "128Mi"}
+    limits: {cpu: "500m", memory: "512Mi"}
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}
+
+startupapicheck:
+  image:
+    repository: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-cert-manager
+    tag: d8ab6416e6e7303a86fa0a8daa82c94a8001f21c9d78eb2e7db20534e5d07ae8
+    digest: sha256:d8ab6416e6e7303a86fa0a8daa82c94a8001f21c9d78eb2e7db20534e5d07ae8
+    pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: "50m", memory: "64Mi"}
+    limits: {cpu: "200m", memory: "256Mi"}
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: ["ALL"]}

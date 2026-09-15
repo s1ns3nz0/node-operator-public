@@ -1,0 +1,9 @@
+{
+  "schema_version": "v1",
+  "registry": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com",
+  "candidates": {
+    "server": {"repository": "node-operator-baseline-vault-runtime-server", "digest": "sha256:8fbe048a50769523a577be1fd41fe7f476e1bda4a345cf25874da6426ac25e49", "entrypoint": "/bin/vault", "version_argument": "version", "version_pattern": "Vault v2.1.0", "user": "100:1000"},
+    "agent": {"repository": "node-operator-baseline-vault-runtime-agent", "digest": "sha256:dc2c7c7b9a5b312605458422749a399420ad1ac60af5b7fb25b14e299cceaf23", "entrypoint": "vault", "version_argument": "version", "version_pattern": "Vault v2.1.0", "user": "100:1000"},
+    "injector": {"repository": "node-operator-baseline-vault-runtime-injector", "digest": "sha256:2937fbc5d368430d089b9b94f82b44baab71524d166358bb8ea48f7b395152d4", "entrypoint": "/bin/vault-k8s", "version_argument": "version", "version_pattern": "1.7.6", "user": "1000:1000"}
+  }
+}

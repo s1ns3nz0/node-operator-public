@@ -1,0 +1,331 @@
+{
+  "exceptions": [
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_126",
+      "subject": "aws_instance.host",
+      "file_path": "infra/vault-recovery/main.tf",
+      "owner": "s1ns3nz0",
+      "rationale": "RECOVERY-BASIC-MONITORING: user-selected basic metrics for temporary isolated recovery host; security logging and isolation remain mandatory",
+      "issue": "docs/security/vault-recovery-dispositions.md",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_283",
+      "subject": "aws_iam_policy_document.s3_endpoint",
+      "file_path": "infra/vault-recovery/main.tf",
+      "owner": "s1ns3nz0",
+      "rationale": "RECOVERY-ECR-LAYERS: AWS-documented Principal wildcard only for regional starport layer GetObject; exact snapshot principal/object/version remains enforced",
+      "issue": "docs/security/vault-recovery-dispositions.md",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "workflow.unsafe",
+      "check_id": "dangerous-triggers",
+      "subject": ".github/workflows/evidence-gate.yml",
+      "owner": "fjybjinsu",
+      "rationale": "CI-EVIDENCE-GATE: reviewed privileged trigger with trusted-main control code and isolated untrusted inputs; residual risk retained for explicit review",
+      "issue": "docs/security/workflow-trigger-exception.md#ci-evidence-gate",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_126",
+      "subject": "aws_instance.host",
+      "file_path": "infra/ops-access/main.tf",
+      "owner": "s1ns3nz0",
+      "rationale": "SSM-BASIC-MONITORING: user explicitly selected basic monitoring for the dedicated private operations host; other EC2 modules are not exempt",
+      "issue": "docs/security/ssm-basic-monitoring-disposition.md",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_109",
+      "subject": "aws_iam_policy_document.kms_key_administrator",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-001",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-001",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_111",
+      "subject": "aws_iam_policy_document.kms_key_administrator",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-002",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-002",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_356",
+      "subject": "aws_iam_policy_document.kms_key_administrator",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-003",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-003",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_109",
+      "subject": "aws_iam_policy_document.audit_replica_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-004",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-004",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_111",
+      "subject": "aws_iam_policy_document.audit_replica_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-005",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-005",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_356",
+      "subject": "aws_iam_policy_document.audit_replica_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-006",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-006",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_111",
+      "subject": "aws_iam_policy_document.audit_notifications_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-007",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-007",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_356",
+      "subject": "aws_iam_policy_document.audit_notifications_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-008",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#kms-008",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_58",
+      "subject": "aws_eks_cluster.private",
+      "owner": "fjybjinsu",
+      "rationale": "EKS-001",
+      "issue": "docs/security/checkov-kms-eks-exception-register.md#eks-001",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_111",
+      "subject": "aws_iam_policy_document.ebs_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-EBS",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#kms-ebs",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_356",
+      "subject": "aws_iam_policy_document.ebs_key",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-EBS",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#kms-ebs",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_111",
+      "subject": "aws_iam_policy_document.validator_firehose_buffer",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-BUFFER",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#kms-buffer",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_356",
+      "subject": "aws_iam_policy_document.validator_firehose_buffer",
+      "owner": "fjybjinsu",
+      "rationale": "KMS-BUFFER",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#kms-buffer",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_358",
+      "subject": "aws_iam_policy_document.github_gitops_oci_mirror_assume_role",
+      "owner": "fjybjinsu",
+      "rationale": "OIDC-IDS",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#oidc-ids",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"argocd\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"cert_manager\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"cert_manager_chart\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"charts\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"nodes\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"vault\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_136",
+      "subject": "aws_ecr_repository.private_gitops[\"vault_chart\"]",
+      "owner": "fjybjinsu",
+      "rationale": "ECR-LEGACY",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#ecr-legacy",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_144",
+      "subject": "aws_s3_bucket.state",
+      "owner": "fjybjinsu",
+      "rationale": "REGIONAL-DR",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#regional-dr",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_144",
+      "subject": "aws_s3_bucket.state_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "REGIONAL-DR",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#regional-dr",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_144",
+      "subject": "aws_s3_bucket.validator_audit",
+      "owner": "fjybjinsu",
+      "rationale": "REGIONAL-DR",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#regional-dr",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_144",
+      "subject": "aws_s3_bucket.vault_snapshot",
+      "owner": "fjybjinsu",
+      "rationale": "REGIONAL-DR",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#regional-dr",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_145",
+      "subject": "aws_s3_bucket.state_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "S3-LOG-ENCRYPTION",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#s3-log-encryption",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_144",
+      "subject": "aws_s3_bucket.audit_replica_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "TERMINAL-REPLICA",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#terminal-replica",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_144",
+      "subject": "aws_s3_bucket.release_artifacts_replica_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "TERMINAL-REPLICA",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#terminal-replica",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_145",
+      "subject": "aws_s3_bucket.audit_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "S3-LOG-ENCRYPTION",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#s3-log-encryption",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_145",
+      "subject": "aws_s3_bucket.audit_replica_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "S3-LOG-ENCRYPTION",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#s3-log-encryption",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_145",
+      "subject": "aws_s3_bucket.release_artifacts_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "S3-LOG-ENCRYPTION",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#s3-log-encryption",
+      "expires_at": "2026-10-03T00:00:00Z"
+    },
+    {
+      "rule": "iac.checkov",
+      "check_id": "CKV_AWS_145",
+      "subject": "aws_s3_bucket.release_artifacts_replica_access_logs",
+      "owner": "fjybjinsu",
+      "rationale": "S3-LOG-ENCRYPTION",
+      "issue": "docs/security/checkov-2026-09-08-disposition.md#s3-log-encryption",
+      "expires_at": "2026-10-03T00:00:00Z"
+    }
+  ]
+}

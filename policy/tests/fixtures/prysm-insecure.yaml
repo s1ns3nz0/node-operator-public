@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prysm-beacon
+spec:
+  template:
+    spec:
+      securityContext: {runAsNonRoot: false}
+      containers:
+        - name: beacon-chain
+          image: offchainlabs/prysm-beacon-chain:v7.1.8
+          securityContext:
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+  volumeClaimTemplates:
+    - metadata: {name: prysm-data}
+      spec:
+        storageClassName: gp2
+        resources: {requests: {storage: 20Gi}}
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata: {name: prysm-hoodi-gp3-kms}
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp2
+  iops: "3000"
+  throughput: "125"
+  encrypted: "false"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-prysm-world}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: prysm-beacon}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock: {cidr: 0.0.0.0/0}

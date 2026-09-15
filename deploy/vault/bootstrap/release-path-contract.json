@@ -1,0 +1,76 @@
+{
+  "schema_version": "v1",
+  "kind": "vault-release-path-bootstrap-recovery-contract",
+  "execution": "declarative-only; no live configuration, initialization, unseal, restore, or apply action is represented or executable",
+  "release_credentials": {
+    "enable_when": "every ordered phase has status=passed evidence and every deny-path probe has status=denied evidence",
+    "otherwise": "deny"
+  },
+  "non_secret_evidence_fields": [
+    "recorded_at", "operator_approval_id", "environment_id", "phase_id", "status", "deny_path_status", "vault_cluster_id", "vault_audit_request_id", "snapshot_reference", "restore_drill_id", "private_dns_probe_id", "tls_probe_id", "github_repository_id", "github_run_id", "github_workflow_ref", "aws_request_id", "codebuild_build_id", "transit_verification_status"
+  ],
+  "forbidden_evidence": [
+    "root_token", "recovery_key", "unseal_key", "vault_token", "oidc_jwt", "aws_access_key", "aws_secret_key", "aws_session_token", "transit_signature", "private_key", "certificate_private_key"
+  ],
+  "phases": [
+    {
+      "order": 1,
+      "id": "private-connectivity-and-tls",
+      "requires": ["docs/gitops/vault-private-connectivity-contract.md", "docs/gitops/private-release-runner-contract.md"],
+      "evidence": ["private_dns_probe_id", "tls_probe_id", "vault_audit_request_id", "deny_path_status"],
+      "deny_when": ["private DNS does not resolve only to the approved private route", "TLS chain, hostname, validity, route, or audit correlation probe fails"]
+    },
+    {
+      "order": 2,
+      "id": "operator-initialize-and-unseal-boundary",
+      "requires": ["separately authorized live rollout", "operator approval outside CI and GitOps"],
+      "evidence": ["operator_approval_id", "vault_cluster_id", "status", "deny_path_status"],
+      "external_material": ["root token", "recovery material", "unseal material"],
+      "automation": "never stores, generates, receives, logs, or applies external material",
+      "deny_when": ["operator-only boundary is absent", "external material is present in CI, GitOps, Terraform state, evidence, or logs"]
+    },
+    {
+      "order": 3,
+      "id": "audit-device-delivery-probe",
+      "requires": ["approved private audit destination", "phase 2 passed"],
+      "evidence": ["vault_audit_request_id", "status", "deny_path_status"],
+      "deny_when": ["audit delivery is unavailable, delayed beyond the approved objective, or cannot be correlated"]
+    },
+    {
+      "order": 4,
+      "id": "encrypted-raft-snapshot-and-isolated-restore-drill",
+      "requires": ["encrypted snapshot destination", "retention policy", "isolated restore environment", "phase 3 passed"],
+      "evidence": ["snapshot_reference", "restore_drill_id", "status", "deny_path_status"],
+      "deny_when": ["snapshot encryption, destination, retention, integrity, or isolated restore drill is missing or fails"]
+    },
+    {
+      "order": 5,
+      "id": "github-jwt-release-role-and-policy",
+      "requires": ["deploy/vault/auth/github-release-jwt-role.json", "deploy/vault/policies/release-runner-dynamic-aws.hcl", "phase 4 passed"],
+      "evidence": ["github_repository_id", "github_run_id", "github_workflow_ref", "vault_audit_request_id", "deny_path_status"],
+      "deny_when": ["repository, tag ref, workflow reference, audience, policy, or unauthorized-claim probe does not match the contract"]
+    },
+    {
+      "order": 6,
+      "id": "aws-secrets-engine-dynamic-release-role",
+      "requires": ["deploy/vault/aws/release-runner-assumed-role-policy.json", "deploy/vault/policies/release-runner-dynamic-aws.hcl", "phase 5 passed"],
+      "evidence": ["aws_request_id", "vault_audit_request_id", "deny_path_status"],
+      "deny_when": ["lease scope, TTL, revocation, static-credential prohibition, or unauthorized lease probe fails"]
+    },
+    {
+      "order": 7,
+      "id": "aws-auth-codebuild-signer-role",
+      "requires": ["deploy/vault/release-signer-aws-auth.md", "deploy/vault/buildspec-release-sign.yml", "phase 6 passed"],
+      "evidence": ["codebuild_build_id", "aws_request_id", "vault_audit_request_id", "deny_path_status"],
+      "deny_when": ["CodeBuild identity, private route, signer policy, or non-signer authentication probe is broader than approved"]
+    },
+    {
+      "order": 8,
+      "id": "transit-key-and-signer-policy",
+      "requires": ["deploy/vault/policies/release-signer.hcl", "scripts/ci/verify-release-signature.sh", "phase 7 passed"],
+      "evidence": ["codebuild_build_id", "transit_verification_status", "vault_audit_request_id", "deny_path_status"],
+      "permissions": ["sign", "verify"],
+      "deny_when": ["Transit verification is not true or a read, export, rotate, delete, administration, or non-signer probe is allowed"]
+    }
+  ]
+}

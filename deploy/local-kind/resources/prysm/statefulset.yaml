@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prysm-beacon
+  namespace: node-operator
+  labels:
+    app.kubernetes.io/name: prysm-beacon
+    app.kubernetes.io/part-of: hoodi-node
+    app.kubernetes.io/version: v7.1.8
+    node-operator.io/network: hoodi
+spec:
+  serviceName: prysm-beacon
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: OnDelete
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prysm-beacon
+      app.kubernetes.io/part-of: hoodi-node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prysm-beacon
+        app.kubernetes.io/part-of: hoodi-node
+        app.kubernetes.io/version: v7.1.8
+        node-operator.io/network: hoodi
+    spec:
+      serviceAccountName: prysm-beacon
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 600
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        node-operator.io/network: hoodi
+        node-operator.io/role: consensus
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values:
+                      - ap-northeast-2a
+                      - ap-northeast-2c
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: nethermind
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: beacon-chain
+          image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-nodes@sha256:49f8454eb2a756402eb781025e370eef7d613668c2914bad4cca9c1aa11fafa4
+          imagePullPolicy: IfNotPresent
+          args:
+            - --accept-terms-of-use
+            - --hoodi
+            - --datadir=/data
+            - --p2p-host-ip=$(POD_IP)
+            - --p2p-tcp-port=13000
+            - --p2p-udp-port=13000
+            - --p2p-max-peers=50
+            - --http-host=0.0.0.0
+            - --http-port=3500
+            - --monitoring-host=127.0.0.1
+            - --monitoring-port=8080
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: TMPDIR
+              value: /tmp
+          ports:
+            - name: p2p-tcp
+              containerPort: 13000
+              protocol: TCP
+            - name: p2p-udp
+              containerPort: 13000
+              protocol: UDP
+            - name: beacon-api
+              containerPort: 3500
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: beacon-api
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 90
+          readinessProbe:
+            httpGet:
+              path: /eth/v1/node/health
+              port: beacon-api
+              scheme: HTTP
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            tcpSocket:
+              port: beacon-api
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 24Gi
+          volumeMounts:
+            - name: prysm-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: prysm-data
+        labels:
+          app.kubernetes.io/name: prysm-beacon
+          app.kubernetes.io/part-of: hoodi-node
+          node-operator.io/encryption-policy: baseline-ebs-kms
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: prysm-hoodi-gp3-kms
+        resources:
+          requests:
+            storage: 500Gi

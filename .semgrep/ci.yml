@@ -1,0 +1,11 @@
+rules:
+  - id: nodeoperator.no-eval
+    languages: [javascript, typescript]
+    message: Dynamic JavaScript evaluation is prohibited.
+    severity: ERROR
+    pattern: eval(...)
+  - id: nodeoperator.no-shell-true
+    languages: [bash]
+    message: Shell commands must not ignore failures.
+    severity: ERROR
+    pattern: $X || true

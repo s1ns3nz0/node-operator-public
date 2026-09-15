@@ -1,0 +1,18 @@
+# Purpose: Emit a review-change signal with no repository permissions; the trusted gate performs reevaluation.
+name: CI Evidence Review Signal
+
+on:
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions: {}
+
+jobs:
+  # Role: Run no checkout or repository code; completion is only an event for the trusted consumer.
+  signal:
+    name: Review Signal
+    runs-on: ubuntu-24.04
+    steps:
+      # Role: Emit only a completion signal; do not fetch PR code or exercise repository permissions.
+      - name: Unprivileged Review Signal
+        run: echo 'Review state changed; trusted workflow_run handler will refresh evidence.'

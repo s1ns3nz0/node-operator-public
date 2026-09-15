@@ -1,0 +1,55 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress-egress
+  namespace: validator-observability
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-collector-dns-and-private-aws-endpoints
+  namespace: validator-observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: validator-log-collector
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # EKS reserves the first address of its default service CIDR for
+    # kubernetes.default.svc. Allow only its HTTPS API path for metadata
+    # enrichment; the VPC CIDR rule below does not cover this service IP.
+    - to:
+        - ipBlock:
+            cidr: 172.20.0.1/32
+      ports:
+        - protocol: TCP
+          port: 443
+    # EKS Pod Identity injects short-lived AWS credentials through this
+    # node-local endpoint. It is not a VPC endpoint and must be explicitly
+    # admitted under the namespace default-deny policy.
+    - to:
+        - ipBlock:
+            cidr: 169.254.170.23/32
+      ports:
+        - protocol: TCP
+          port: 80
+    # Private interface endpoints resolve inside the approved VPC. The IAM role
+    # independently restricts this pod to CloudWatch write operations only.
+    - to:
+        - ipBlock:
+            cidr: 10.80.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

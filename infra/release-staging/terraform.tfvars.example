@@ -1,0 +1,9 @@
+# Example only: replace every value with reviewed, non-secret deployment data.
+# deployment_name must be unique across all S3 bucket names, including deleted
+# buckets that have not yet become available again.
+aws_account_id               = "123456789012"
+deployment_name              = "node-operator-release-20260915-a1b2"
+github_repository            = "s1ns3nz0/node-operator"
+github_oidc_provider_arn     = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+object_prefix                = "oci/revision-0123456789abcdef/"
+allowed_uploader_principal_arn = "arn:aws:iam::123456789012:role/node-operator-release-uploader"

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0",
+  "description": "User-only isolated Vault recovery ceremony; no terminal transcript of recovery material",
+  "sessionType": "Standard_Stream",
+  "inputs": {
+    "s3BucketName": "",
+    "s3KeyPrefix": "",
+    "s3EncryptionEnabled": true,
+    "cloudWatchLogGroupName": "",
+    "cloudWatchEncryptionEnabled": true,
+    "cloudWatchStreamingEnabled": false,
+    "runAsEnabled": false,
+    "idleSessionTimeout": "15",
+    "maxSessionDuration": "60",
+    "shellProfile": {
+      "windows": "exit 1",
+      "linux": "exec sudo -n /usr/bin/python3 -B /opt/node-operator-isolated-recovery/rehearse-isolated-vault-restore.py --execute"
+    }
+  }
+}

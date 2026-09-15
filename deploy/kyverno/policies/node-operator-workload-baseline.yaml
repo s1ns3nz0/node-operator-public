@@ -1,0 +1,110 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: node-operator-workload-baseline
+  annotations:
+    policies.kyverno.io/title: Node operator workload baseline
+    policies.kyverno.io/category: Pod Security Standards, Supply Chain
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-private-ecr-image-digest
+      match:
+        any:
+          - resources:
+              namespaces: [node-operator]
+              kinds: [Pod]
+      validate:
+        message: Containers must use a private ap-northeast-2 ECR image pinned to a SHA-256 digest.
+        foreach:
+          - list: request.object.spec.containers[]
+            pattern:
+              image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/*@sha256:????????????????????????????????????????????????????????????????"
+          - list: request.object.spec.initContainers || `[]`
+            pattern:
+              image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/*@sha256:????????????????????????????????????????????????????????????????"
+    - name: deny-host-namespaces-and-host-paths
+      match:
+        any:
+          - resources:
+              namespaces: [node-operator]
+              kinds: [Pod]
+      validate:
+        message: Host namespaces and hostPath volumes are prohibited.
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.hostNetwork || `false` }}"
+                operator: Equals
+                value: true
+              - key: "{{ request.object.spec.hostPID || `false` }}"
+                operator: Equals
+                value: true
+              - key: "{{ request.object.spec.hostIPC || `false` }}"
+                operator: Equals
+                value: true
+              - key: "{{ (request.object.spec.volumes || `[]`)[?hostPath] | length(@) }}"
+                operator: GreaterThan
+                value: 0
+    - name: require-restricted-pod-security-context
+      match:
+        any:
+          - resources:
+              namespaces: [node-operator]
+              kinds: [Pod]
+      validate:
+        message: Pods must run as non-root with RuntimeDefault seccomp.
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+              seccompProfile:
+                type: RuntimeDefault
+    - name: require-restricted-container-security-context
+      match:
+        any:
+          - resources:
+              namespaces: [node-operator]
+              kinds: [Pod]
+      validate:
+        message: Containers must use the restricted security context.
+        foreach:
+          - list: request.object.spec.containers[]
+            pattern:
+              securityContext:
+                runAsNonRoot: true
+                =(privileged): false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+          - list: request.object.spec.initContainers || `[]`
+            pattern:
+              securityContext:
+                runAsNonRoot: true
+                =(privileged): false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+    - name: require-container-resource-requests-and-limits
+      match:
+        any:
+          - resources:
+              namespaces: [node-operator]
+              kinds: [Pod]
+      validate:
+        message: Every container must declare CPU and memory requests and limits.
+        foreach:
+          - list: request.object.spec.containers[]
+            pattern:
+              resources:
+                requests: {cpu: "?*", memory: "?*"}
+                limits: {cpu: "?*", memory: "?*"}
+          - list: request.object.spec.initContainers || `[]`
+            pattern:
+              resources:
+                requests: {cpu: "?*", memory: "?*"}
+                limits: {cpu: "?*", memory: "?*"}

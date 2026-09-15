@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/ConsenSys/web3signer.git",
+  "tag": "26.4.2",
+  "commit": "221996a5ddf6ab7648a8102ee029d9723762c116",
+  "patch_sha256": "a90f4a526417d3185b22ee3dce1bf21b1ab90e903fe2c2e564834594153b2062",
+  "audit_patch_sha256": "582fb3dab2673fef1108954641e04adb69c38b2a11532c5b7c2b5e4c5667f04e",
+  "builder_image": "eclipse-temurin:21-jdk-noble@sha256:75ce56643243c3db632be2ef259625fb42ee3be1334389659f7a1a61acb78783",
+  "runtime_image": "eclipse-temurin:25-jre-noble@sha256:b4c93a50fc67612798db73d68ca3b0ee4ebdd51736e59cca370e689b9797037e",
+  "status": "audit_patch_linux_amd64_full_tests_smoke_critical_high_zero_scan_and_reviewed_single_signer_rollout_passed"
+}

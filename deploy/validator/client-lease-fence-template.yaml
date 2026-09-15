@@ -1,0 +1,165 @@
+# Render this set-scoped proxy with the zero-replica client. It forwards the
+# existing end-to-end TLS stream only while it owns the exact Lease. The client
+# never receives the Kubernetes token and cannot reach Web3Signer directly.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-lease-fence
+  namespace: validator-operations
+  labels:
+    app.kubernetes.io/component: validator-client-fence
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+immutable: true
+data:
+  security-model: |
+    The Pod UID is the holder identity. The guard refuses stale, malformed,
+    missing, or differently held Leases; a failed read or optimistic patch
+    closes its listener and all admitted TLS streams within the bounded
+    authority deadline.
+    The guard has no signer, Vault, Secret, or workload-management authority.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-fence
+  namespace: validator-operations
+  labels:
+    app.kubernetes.io/component: validator-client-fence
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-lease-fence
+  namespace: validator-operations
+  labels:
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["validator-REPLACE_WITH_VALIDATOR_SET-primary"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    resourceNames: ["validator-REPLACE_WITH_VALIDATOR_SET-client-0"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-lease-fence
+  namespace: validator-operations
+  labels:
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+subjects:
+  - kind: ServiceAccount
+    name: validator-REPLACE_WITH_VALIDATOR_SET-client-fence
+    namespace: validator-operations
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-lease-fence
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-signing-fence
+  namespace: validator-operations
+  labels: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}
+spec:
+  # Staging only: activate-hoodi-validator-client.sh starts exactly one fence
+  # together with the identity-bound validator client. Do not bypass the gate.
+  replicas: 0
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: validator-signing-fence
+        node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+        node-operator.io/deployment-name: REPLACE_WITH_DEPLOYMENT_IDENTITY
+        node-operator.io/release-revision: "REPLACE_WITH_RELEASE_IDENTITY"
+    spec:
+      serviceAccountName: validator-REPLACE_WITH_VALIDATOR_SET-client-fence
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      volumes:
+        - name: api-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken: {expirationSeconds: 600, path: token}
+        - name: api-ca
+          configMap: {name: kube-root-ca.crt, defaultMode: 0444}
+      containers:
+        - name: signing-fence
+          image: REPLACE_WITH_SIGNING_FENCE_IMAGE
+          command: [/validator-signing-fence]
+          args:
+            - --listen=:9001
+            - --health-listen=:9002
+            - --upstream=validator-REPLACE_WITH_VALIDATOR_SET-remote-signer-direct.validator-operations.svc:9000
+            - --lease-name=validator-REPLACE_WITH_VALIDATOR_SET-primary
+            - --client-pod-name=validator-REPLACE_WITH_VALIDATOR_SET-client-0
+            - --validator-set=REPLACE_WITH_VALIDATOR_SET
+            - --token-path=/var/run/secrets/fence/token
+            - --ca-path=/var/run/secrets/fence-ca/ca.crt
+            - --poll-interval=10s
+            - --request-timeout=2s
+            - --safety-margin=5s
+            - --max-connection-age=15s
+          env:
+            - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {fieldPath: metadata.uid}}}
+          ports: [{name: fence-proxy, containerPort: 9001}, {name: health, containerPort: 9002}]
+          volumeMounts:
+            - {name: api-token, mountPath: /var/run/secrets/fence, readOnly: true}
+            - {name: api-ca, mountPath: /var/run/secrets/fence-ca, readOnly: true}
+          readinessProbe: {httpGet: {path: /healthz, port: health}, periodSeconds: 2, failureThreshold: 2}
+          livenessProbe: {httpGet: {path: /healthz, port: health}, periodSeconds: 5, failureThreshold: 2}
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-remote-signer
+  namespace: validator-operations
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}
+  ports: [{name: signer-api, port: 9000, targetPort: fence-proxy}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-signing-fence-ingress
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/component: validator-client, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}}]
+      ports: [{protocol: TCP, port: 9001}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-signing-fence-egress
+  namespace: validator-operations
+  annotations:
+    node-operator.io/runtime-api-egress: kubernetes-service-and-endpoints
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/component: validator-remote-signer, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}}]
+      ports: [{protocol: TCP, port: 9000}]
+    - to: [{ipBlock: {cidr: REPLACE_WITH_KUBERNETES_API_CIDR}}]
+      ports: [{protocol: TCP, port: 443}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

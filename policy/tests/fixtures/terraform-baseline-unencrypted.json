@@ -1,0 +1,15 @@
+{
+  "baseline": {
+    "eks_clusters": [
+      {
+        "address": "aws_eks_cluster.node_operator",
+        "endpoint_private_access": true,
+        "endpoint_public_access": false,
+        "encrypted_resources": [],
+        "kms_key_arn": ""
+      }
+    ],
+    "managed_node_groups": [],
+    "iam_policies": []
+  }
+}

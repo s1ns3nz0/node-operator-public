@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: insecure-workload-fixture
+spec:
+  serviceName: insecure-workload-fixture
+  selector:
+    matchLabels: {app: insecure-fixture}
+  template:
+    metadata:
+      labels: {app: insecure-fixture}
+    spec:
+      containers:
+        - name: node
+          image: registry.example/node:latest
+          securityContext:
+            privileged: true
+            runAsNonRoot: false
+            readOnlyRootFilesystem: false
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-egress-fixture
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - {}

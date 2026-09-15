@@ -1,0 +1,57 @@
+# These policies narrow the only allowed paths for the Hoodi consensus client.
+# A controlled egress gateway is deliberately a prerequisite, rather than an
+# implicit unrestricted internet exception in this private-cluster baseline.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prysm-dns
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prysm-beacon
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prysm-controlled-egress
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prysm-beacon
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              node-operator.io/edge: controlled
+          podSelector:
+            matchLabels:
+              node-operator.io/egress-purpose: hoodi-p2p
+      ports:
+        - protocol: TCP
+          port: 13000
+        - protocol: UDP
+          port: 13000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              node-operator.io/edge: controlled
+          podSelector:
+            matchLabels:
+              node-operator.io/egress-purpose: hoodi-https
+      ports:
+        - protocol: TCP
+          port: 443

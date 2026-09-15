@@ -1,0 +1,7 @@
+# Unified patch context requires a leading space before tabs and blank lines.
+# The applied upstream source is separately checked with git diff --check.
+.ci/prysm-mtls/patches/*.patch whitespace=-blank-at-eol,-space-before-tab
+.ci/web3signer-hardened/patches/*.patch whitespace=-blank-at-eol,-space-before-tab
+# Preserve CloudWatch unified-diff context, including a final blank context line.
+# Published build patches remain checksum-pinned and applied with --fuzz=0.
+.ci/cloudwatch-agent/patches/*.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof

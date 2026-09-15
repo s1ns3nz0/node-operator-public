@@ -1,0 +1,63 @@
+# A validator set is a distinct security domain. The consensus client can use
+# only the remote-signing API; it cannot reach Vault or an onboarding ceremony.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress-egress
+  namespace: validator-operations
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-signing-fence-to-remote-signer
+  namespace: validator-operations
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: validator-remote-signer
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: validator-signing-fence
+      ports:
+        - protocol: TCP
+          port: 9000
+---
+# The remote signer may obtain a short-lived workload identity only from the
+# private Vault API. It must not be given general Internet, CI, or release
+# signer access. DNS is listed separately so all other egress remains denied.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-remote-signer-vault-and-dns
+  namespace: validator-operations
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: validator-remote-signer
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

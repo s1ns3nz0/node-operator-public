@@ -1,0 +1,5 @@
+# Archived compatibility module; not part of the official Collector v0.128 map.
+module=go.opentelemetry.io/collector/confmap/converter/expandconverter
+version=v0.113.0
+go_mod_sha256=50656304c0edc68ab1a68ec0b9c95036587daf8aa9b4f82bc16313b802e6a20b
+expand_go_sha256=387f0bcb6826df11adb68289d3d9f6e29d5aea7207e8b1f1f976275d40bcad39

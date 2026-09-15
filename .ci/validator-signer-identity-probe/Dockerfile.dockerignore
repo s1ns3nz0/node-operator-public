@@ -1,0 +1,4 @@
+*
+!go.mod
+!cmd/validator-signer-identity-probe/main.go
+!cmd/validator-signer-identity-probe/main_test.go

@@ -1,0 +1,47 @@
+# This policy is installed explicitly by the staged-release and live-cutover
+# paths. Keeping it separate prevents those paths from adopting historical
+# common fence policies with unscoped selectors.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-labelled-runtime-vault-clients
+  namespace: validator-operations
+spec:
+  podSelector:
+    matchLabels:
+      node-operator.io/vault-client: "true"
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - {protocol: TCP, port: 8200}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    # Validator clients also need the private Beacon REST API and the
+    # set-scoped signing fence. These are the only non-Vault workload paths.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: node-operator
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prysm-beacon
+      ports:
+        - {protocol: TCP, port: 3500}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: validator-signing-fence
+      ports:
+        - {protocol: TCP, port: 9001}

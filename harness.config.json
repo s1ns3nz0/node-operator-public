@@ -1,0 +1,50 @@
+{
+  "$schema": "./harness.config.schema.json",
+  "schemaVersion": 1,
+  "project": {"name": "node-operator", "description": "Read-only Hoodi node operator with policy-governed CI."},
+  "paperthin": {"source": "github:LilMGenius/paperthin", "ref": "3bca079a51bcfff5dafb53d1d7f9f523d66ee317"},
+  "models": {
+    "tiers": {
+      "sol": {"model": "gpt-5.6-sol", "purpose": "security, integration, final judgment"},
+      "terra": {"model": "gpt-5.6-terra", "purpose": "bounded implementation and independent review"},
+      "luna": {"model": "gpt-5.6-luna", "purpose": "reconnaissance and evidence gathering"}
+    },
+    "fallback": "nearest-meeting-tier",
+    "recordFallbacks": true
+  },
+  "policies": {
+    "externalActions": "explicit-task-authorization",
+    "worktreesRequiredForMutations": true,
+    "humanApprovalForPromotedLearnings": true,
+    "cleanRoomDebriefRequired": true,
+    "workflowRouting": {
+      "defaultMode": "lightweight",
+      "fullWorkflowTriggers": ["product-design", "security-or-external-integration", "data-or-irreversible-change", "external-state-change"],
+      "lightweight": {"maxToolCalls": 3, "maxValidationCommands": 1, "delegation": "forbidden", "durableArtifacts": false}
+    },
+    "testPortability": {"requiredPlatform": "linux", "vendorNeutral": true, "allowLocalOnlyRequired": false},
+    "promptIntake": {"enabled": true, "handler": "grill-me", "when": "full-workflow", "mode": "one-question-at-a-time", "blocksWorkUntilComplete": true},
+    "skillExecution": {"enabled": false, "commands": {}, "requiredSkills": ["grill-me", "sip", "shower"], "conditionalSkills": ["factchk", "mandela", "ssotize", "detool", "re0", "aim", "readchk", "autobahn", "feynman", "hate"]},
+    "ambiguityResolution": {
+      "enabled": true, "thinAskResolver": "paperthin:aim", "intentChecker": "paperthin:readchk", "riskCarver": "paperthin:autobahn", "interviewer": "grill-me", "consolidator": "paperthin:ssotize", "decisionChallenge": "paperthin:feynman", "adversarialPlanCheck": "paperthin:hate",
+      "hateCheckpoints": ["after-non-trivial-plan", "before-irreversible-or-high-cost-stage"], "requiresExplicitUserAcceptance": true, "safeCorrectionAttemptsBeforeInterview": 1, "blockAffectedNodeWhenUnresolved": true, "decisionRecordsDirectory": "docs/decisions", "productSpecsDirectory": "docs/product-specs"
+    },
+    "admissibility": {
+      "enabled": true, "orchestrator": "paperthin:sip", "runAfterDurableArtifactChange": false, "requiredWhen": "full-workflow",
+      "unexplainable": {"check": "paperthin:shower", "blocksCompletion": true},
+      "unreasonable": {"checks": ["paperthin:factchk", "paperthin:mandela"], "blocksWhen": "falsified-requirement-claim-or-evaluation"},
+      "unacceptable": {"check": "paperthin:autobahn", "blocksCompletion": true, "continueSafeRemainder": true}, "safeCorrectionAttemptsBeforeEscalation": 1, "recordSkippedChecks": true
+    },
+    "roleQuality": {
+      "luna": {"requiredEvidence": ["task findings"], "conditionalSkills": ["paperthin:factchk", "paperthin:mandela"]},
+      "terra": {"requiredSkills": ["paperthin:sip"], "requiredEvidence": ["applicable checks and skipped-check reasons"]},
+      "sol": {"requiredSkills": ["paperthin:shower"], "controlledSkills": ["paperthin:autobahn", "grill-me", "paperthin:hate"], "requiredEvidence": ["integration decision and required review evidence"]}
+    },
+    "knowledgeSteward": {"enabled": true, "invocation": "explicit-user", "defaultTier": "terra", "readOnly": true, "defaultPersistence": "chat-only", "canonicalWikiDirectory": "docs", "reentrySkill": "paperthin:catchup", "driftAudit": "paperthin:ssotize", "auditTriggers": ["accepted-product-spec-change", "accepted-decision-change", "explicit-request"]},
+    "requirementsSteward": {"enabled": true, "invocation": "explicit-user", "defaultTier": "terra", "canonicalDirectory": "docs/product-specs", "usesProcess": "write-a-prd-adapted", "opensGitHubIssue": false, "requiresExplicitApproval": true, "taskRequiresApprovedProductSpec": true},
+    "solidReview": {"enabled": true, "appliesTo": "non-trivial-object-oriented-production-code-or-module-boundaries", "defaultTier": "terra", "preImplementationRequired": true, "integrationRerunTriggers": ["public-interface-change", "dependency-direction-change", "module-boundary-change"], "reportFile": "solid-review.md", "blocksMaterialFindings": true},
+    "showDontTell": {"enabled": true, "requiredForObservableBehavior": true, "independentReview": true, "commitSmallArtifacts": true, "userAcceptanceBlocksOnlyWhenConfigured": true, "reportFile": "demonstration.md"}
+  },
+  "graphs": {"directory": "plans", "requiredWhen": ["multiple-agents", "security", "multiple-validation-layers"]},
+  "adapters": {"active": ["policy"], "definitions": {"policy": {"testPolicy": {"platforms": ["linux"], "localOnly": false, "vendorNeutral": true}, "commands": {"rego": "scripts/ci/test-policy.sh", "normalizer": "scripts/ci/test-normalizer.sh", "conftest": "scripts/ci/test-conftest.sh", "shellcheck": "scripts/ci/test-script-quality.sh", "pr-gate": "scripts/ci/test-pr-gate.sh"}}}}
+}

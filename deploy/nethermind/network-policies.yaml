@@ -1,0 +1,124 @@
+# The T-3 default-deny policy selects every pod in node-operator. These rules
+# add only the paths this execution client needs. Dynamic Hoodi peers use the
+# private NAT route, with an exact port allow-list duplicated in the dedicated
+# Hoodi node security group and VPC Flow Logs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nethermind-dns
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nethermind-nat-port-egress
+  namespace: node-operator
+  labels:
+    node-operator.io/egress-class: hoodi-nat-port-restricted
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 30303
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 30303
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prysm-engine-api-ingress
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prysm-beacon
+      ports:
+        - protocol: TCP
+          port: 8551
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nethermind-vault-egress
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nethermind-metrics-ingress
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: validator-observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: validator-metrics-collector
+      ports:
+        - protocol: TCP
+          port: 6060

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hoodi-validator-runtime-contract
+  namespace: validator-operations
+  labels:
+    app.kubernetes.io/part-of: hoodi-validator
+immutable: true
+data:
+  required-preflight: |
+    fresh validator public key
+    public deposit attestation
+    human wallet transaction confirmation
+    private Beacon synced and validator active
+    approved private ECR image digests
+    Vault runtime role and policy verified
+    PostgreSQL retained PVC and password-auth verification
+    Web3Signer TLS certificate and client compatibility verification
+  forbidden-inputs: |
+    test validator key
+    test slashing database
+    root token
+    recovery key
+    Kubernetes Secret with validator material
+    mutable image tag

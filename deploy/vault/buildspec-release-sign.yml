@@ -1,0 +1,57 @@
+version: 0.2
+env:
+  shell: bash
+phases:
+  build:
+    commands:
+      - set -euo pipefail
+      - expected_vault_version="1.20.4"
+      - installed_vault_version="$(vault version | awk 'NR == 1 && $1 == "Vault" && $2 ~ /^v[0-9]+/ { sub(/^v/, "", $2); print $2; exit }')"
+      - test "$installed_vault_version" = "$expected_vault_version"
+      - test -n "${VAULT_ADDR:-}"
+      - test -n "${VAULT_AUTH_ROLE:-}"
+      - test -n "${VAULT_CA_CERT:-}"
+      - umask 077
+      - printf '%s' "$VAULT_CA_CERT" > /tmp/vault-ca.crt
+      - export VAULT_CACERT=/tmp/vault-ca.crt
+      - unset VAULT_CA_CERT
+      - export AWS_DEFAULT_REGION="${AWS_REGION:?missing AWS region}"
+      - export AWS_STS_REGIONAL_ENDPOINTS=regional
+      - test -f node-operator-release-bundle.tar
+      - test -f node-operator-release-bundle.sha256
+      - test -f provenance-input.json
+      - bundle_digest="$(awk 'NR == 1 { print $1 }' node-operator-release-bundle.sha256)"
+      - test "$bundle_digest" = "sha256:$(sha256sum node-operator-release-bundle.tar | awk '{print $1}')"
+      - provenance_digest="sha256:$(sha256sum provenance-input.json | awk '{print $1}')"
+      - source_revision="$(jq -er '.predicate.buildDefinition.resolvedDependencies[] | select(.uri == "git+node-operator") | .digest.gitCommit' provenance-input.json)"
+      - builder_id="$(jq -er '.predicate.runDetails.builder.id' provenance-input.json)"
+      - jq -e --arg digest "${bundle_digest#sha256:}" '.subject == [{name:"node-operator-release-bundle.tar",digest:{sha256:$digest}}]' provenance-input.json >/dev/null
+      - payload="$(base64 < provenance-input.json | tr -d '\n')"
+      - vault_token="$(vault login -method=aws -token-only role="${VAULT_AUTH_ROLE}" region="${AWS_REGION}")"
+      - test -n "$vault_token"
+      - export VAULT_TOKEN="$vault_token"
+      - vault write -format=json transit/sign/node-operator-release input="$payload" > signature.json
+      - jq -e '.data.signature | type == "string"' signature.json >/dev/null
+      - signature="$(jq -r .data.signature signature.json)"
+      - vault write -format=json transit/verify/node-operator-release input="$payload" signature="$signature" > verify.json
+      - jq -e '.data.valid == true' verify.json >/dev/null
+      - >-
+        jq -n
+        --arg bundle_digest "$bundle_digest"
+        --arg provenance_digest "$provenance_digest"
+        --arg source_revision "$source_revision"
+        --arg builder_id "$builder_id"
+        --arg signature "$signature"
+        --arg build_id "${CODEBUILD_BUILD_ID:?missing CodeBuild build identity}"
+        '{schema_version:"v1",artifact:{name:"node-operator-release-bundle.tar",digest:$bundle_digest},provenance:{sha256:$provenance_digest,subject_digest:$bundle_digest,source_revision:$source_revision,builder_id:$builder_id},transit:{key:"node-operator-release",signature:$signature,verified:true},signer:{auth_method:"aws",vault_role:env.VAULT_AUTH_ROLE},codebuild:{build_id:$build_id}}'
+        > release-verification.json
+      - jq -e '.schema_version == "v1" and .transit.verified == true and (.transit.signature | type == "string")' release-verification.json >/dev/null
+      - unset VAULT_TOKEN
+      - unset VAULT_TOKEN VAULT_CACERT
+      - unset vault_token payload signature
+artifacts:
+  files:
+    - node-operator-release-bundle.tar
+    - node-operator-release-bundle.sha256
+    - provenance-input.json
+    - release-verification.json

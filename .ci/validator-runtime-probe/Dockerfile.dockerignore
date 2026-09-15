@@ -1,0 +1,4 @@
+**
+!go.mod
+!cmd/validator-runtime-probe/
+!cmd/validator-runtime-probe/*.go

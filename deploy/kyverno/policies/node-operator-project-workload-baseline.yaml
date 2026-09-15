@@ -1,0 +1,120 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: node-operator-project-workload-baseline
+  annotations:
+    policies.kyverno.io/title: Node operator project workload baseline
+    policies.kyverno.io/category: Pod Security Standards, Supply Chain
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Applies the workload baseline to validator-operations, vault, argocd,
+      cert-manager, and validator-observability. kyverno and kube-system are
+      deliberately excluded as separately governed control-plane namespaces.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-private-ecr-image-digest
+      match: {any: [{resources: {namespaces: [validator-operations, vault, argocd, cert-manager, validator-observability], kinds: [Pod]}}]}
+      validate:
+        message: Containers must use a private ap-northeast-2 ECR image pinned to a SHA-256 digest.
+        foreach:
+          - list: request.object.spec.containers[]
+            pattern: {image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/*@sha256:????????????????????????????????????????????????????????????????"}
+          - list: request.object.spec.initContainers || `[]`
+            pattern: {image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/*@sha256:????????????????????????????????????????????????????????????????"}
+    - name: deny-host-namespaces
+      match: {any: [{resources: {namespaces: [validator-operations, vault, argocd, cert-manager, validator-observability], kinds: [Pod]}}]}
+      validate:
+        message: Host network, PID, and IPC namespaces are prohibited.
+        deny:
+          conditions:
+            any:
+              - {key: "{{ request.object.spec.hostNetwork || `false` }}", operator: Equals, value: true}
+              - {key: "{{ request.object.spec.hostPID || `false` }}", operator: Equals, value: true}
+              - {key: "{{ request.object.spec.hostIPC || `false` }}", operator: Equals, value: true}
+    - name: deny-unapproved-hostpaths
+      match: {any: [{resources: {namespaces: [validator-operations, vault, argocd, cert-manager, validator-observability], kinds: [Pod]}}]}
+      validate:
+        message: HostPath volumes are prohibited except for the reviewed validator log collector.
+        deny:
+          conditions:
+            all:
+              - key: "{{ ((request.object.spec.volumes || `[]`)[?hostPath] | length(@) == `0`) || (request.namespace == 'validator-observability' && (request.object.spec.serviceAccountName || '') == 'validator-log-collector') }}"
+                operator: NotEquals
+                value: true
+    - name: restrict-validator-log-collector-hostpath
+      match: {any: [{resources: {namespaces: [validator-observability], kinds: [Pod]}}]}
+      preconditions:
+        all:
+          - {key: "{{ request.object.spec.serviceAccountName || '' }}", operator: Equals, value: validator-log-collector}
+      validate:
+        message: validator-log-collector may read only /var/log through its varlog hostPath volume, mounted read-only by the fixed fluent-bit container.
+        deny:
+          conditions:
+            any:
+              - {key: "{{ (request.object.spec.volumes || `[]`)[?hostPath] | length(@) }}", operator: NotEquals, value: 1}
+              - {key: "{{ (request.object.spec.volumes || `[]`)[?hostPath].name }}", operator: AnyNotIn, value: [varlog]}
+              - {key: "{{ (request.object.spec.volumes || `[]`)[?hostPath].hostPath.path }}", operator: AnyNotIn, value: [/var/log]}
+              - {key: "{{ (request.object.spec.volumes || `[]`)[?hostPath].hostPath.type }}", operator: AnyNotIn, value: [Directory]}
+              - {key: "{{ (request.object.spec.containers || `[]`)[?name == 'fluent-bit'] | length(@) }}", operator: NotEquals, value: 1}
+              - {key: "{{ (request.object.spec.containers || `[]`)[?name == 'fluent-bit'].image }}", operator: AnyNotIn, value: ["123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-validator-fluent-bit@sha256:a5761fa961cb22dd0875883a4d446b1acd99d4935d77358aa9f50ee177e44fe2"]}
+              - {key: "{{ (request.object.spec.containers || `[]`)[?name == 'fluent-bit'].volumeMounts[] | [?name == 'varlog'] | length(@) }}", operator: NotEquals, value: 1}
+              - {key: "{{ (request.object.spec.containers || `[]`)[?name == 'fluent-bit'].volumeMounts[] | [?name == 'varlog' && mountPath == '/var/log' && readOnly == `true`] | length(@) }}", operator: NotEquals, value: 1}
+              - {key: "{{ (request.object.spec.containers || `[]`)[?name != 'fluent-bit'].volumeMounts[] | [?name == 'varlog'] | length(@) }}", operator: GreaterThan, value: 0}
+              - {key: "{{ (request.object.spec.initContainers || `[]`)[].volumeMounts[] | [?name == 'varlog'] | length(@) }}", operator: GreaterThan, value: 0}
+    - name: require-effective-restricted-runtime-security-context
+      match: {any: [{resources: {namespaces: [validator-operations, vault, argocd, cert-manager, validator-observability], kinds: [Pod]}}]}
+      validate:
+        message: Containers must effectively run as non-root with RuntimeDefault seccomp.
+        foreach:
+          - list: request.object.spec.containers[]
+            deny:
+              conditions:
+                all:
+                  - key: "{{ not_null(element.securityContext.runAsNonRoot, request.object.spec.securityContext.runAsNonRoot, `false`) || (request.namespace == 'validator-observability' && (request.object.spec.serviceAccountName || '') == 'validator-log-collector' && element.name == 'fluent-bit' && element.image == '123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-validator-fluent-bit@sha256:a5761fa961cb22dd0875883a4d446b1acd99d4935d77358aa9f50ee177e44fe2') }}"
+                    operator: NotEquals
+                    value: true
+          - list: request.object.spec.containers[]
+            deny:
+              conditions:
+                all:
+                  - {key: "{{ not_null(element.securityContext.seccompProfile.type, request.object.spec.securityContext.seccompProfile.type, '') }}", operator: NotEquals, value: RuntimeDefault}
+          - list: request.object.spec.initContainers || `[]`
+            deny:
+              conditions:
+                all:
+                  - {key: "{{ not_null(element.securityContext.runAsNonRoot, request.object.spec.securityContext.runAsNonRoot, `false`) }}", operator: NotEquals, value: true}
+          - list: request.object.spec.initContainers || `[]`
+            deny:
+              conditions:
+                all:
+                  - {key: "{{ not_null(element.securityContext.seccompProfile.type, request.object.spec.securityContext.seccompProfile.type, '') }}", operator: NotEquals, value: RuntimeDefault}
+    - name: require-restricted-container-security-context
+      match: {any: [{resources: {namespaces: [validator-operations, vault, argocd, cert-manager, validator-observability], kinds: [Pod]}}]}
+      validate:
+        message: Containers must use the restricted security context.
+        foreach:
+          - list: request.object.spec.containers[]
+            pattern:
+              securityContext:
+                =(privileged): false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+          - list: request.object.spec.initContainers || `[]`
+            pattern:
+              securityContext:
+                =(privileged): false
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+    - name: require-container-resource-requests-and-limits
+      match: {any: [{resources: {namespaces: [validator-operations, vault, argocd, cert-manager, validator-observability], kinds: [Pod]}}]}
+      validate:
+        message: Every container must declare CPU and memory requests and limits.
+        foreach:
+          - list: request.object.spec.containers[]
+            pattern: {resources: {requests: {cpu: "?*", memory: "?*"}, limits: {cpu: "?*", memory: "?*"}}}
+          - list: request.object.spec.initContainers || `[]`
+            pattern: {resources: {requests: {cpu: "?*", memory: "?*"}, limits: {cpu: "?*", memory: "?*"}}}

@@ -1,0 +1,11 @@
+.git
+.github
+docs
+deploy
+infra
+plans
+reports
+scripts
+policy
+.ci/scanners
+.ci/toolchains

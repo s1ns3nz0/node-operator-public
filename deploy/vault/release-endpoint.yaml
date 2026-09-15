@@ -1,0 +1,30 @@
+# A separate Service preserves Vault's Helm-managed ClusterIP services while
+# allowing the EKS service controller to create an internal-only TCP NLB.
+# TCP pass-through keeps Vault responsible for TLS, SNI, and client-certificate
+# validation. This service must never be changed to public scheme or expose
+# the Raft listener.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-release
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-release
+    app.kubernetes.io/part-of: node-operator
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Cluster
+  selector:
+    app.kubernetes.io/instance: vault
+    app.kubernetes.io/name: vault
+    component: server
+    vault-active: "true"
+  ports:
+    - name: https
+      port: 8200
+      protocol: TCP
+      targetPort: 8200

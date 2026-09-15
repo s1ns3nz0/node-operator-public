@@ -1,0 +1,11 @@
+scripts/ci/test-vault-v2-secret-boundary-contract.sh
+scripts/ci/test-vault-gitops-contract.sh
+scripts/ci/test-vault-encrypted-storageclass.sh
+scripts/ci/test-vault-sealed-readiness-contract.sh
+scripts/ci/test-vault-v2-bootstrap-cleanup.py
+scripts/ci/test-recover-and-onboard-hoodi-validator-keystore.py
+scripts/ci/test-verify-custody-validator-key.py
+scripts/ci/test-prepare-hoodi-vault-v2-transport.py
+scripts/ci/test-validator-quiescence.py
+scripts/ci/test-validator-cutover-rendering.py
+scripts/ci/test-vault-v2-role-activation.py

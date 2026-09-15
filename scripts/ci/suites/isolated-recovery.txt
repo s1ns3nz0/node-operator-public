@@ -1,0 +1,3 @@
+scripts/ci/test-isolated-vault-grant-admin.py
+scripts/ci/test-isolated-recovery-egress.py
+scripts/ci/test-isolated-vault-restore.py

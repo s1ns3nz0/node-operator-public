@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/OffchainLabs/prysm.git",
+  "tag": "v7.1.8",
+  "commit": "51b5a75ebbadf05af22bd2601b5baf7a9e99b66d",
+  "go_version": "1.26.6",
+  "target": "./cmd/validator",
+  "release_platform": "linux/amd64",
+  "patch_directory": ".ci/prysm-mtls/patches",
+  "patch_sha256": "05fd3fa777abc99d5f0f66c192dfcca64922f1f1b0b2c35aa337dcb0c60970be",
+  "security_patch_sha256": "ff4f2db3b57b8d5d2756bfdf03e4d16ee12b62f218beb12a56e6c60f342a4b91",
+  "builder_image": "golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83",
+  "runtime_image": "alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40",
+  "status": "private_ecr_candidate_published_digest_verified_and_rescanned_no_cluster_rollout"
+}

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: project-coverage-vault, namespace: vault}
+spec:
+  securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+  initContainers:
+    - name: init
+      image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-init@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}, privileged: false, readOnlyRootFilesystem: true}
+      resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {cpu: 100m, memory: 128Mi}}
+  containers:
+    - name: app
+      image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}, privileged: false, readOnlyRootFilesystem: true}
+      resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {cpu: 100m, memory: 128Mi}}

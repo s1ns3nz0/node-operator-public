@@ -1,0 +1,25 @@
+# This config holds ceremony metadata only. It intentionally has no Secret,
+# keystore, password, private key, seed phrase, or withdrawal credential.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: validator-onboarding-contract
+  namespace: validator-operations
+  labels:
+    app.kubernetes.io/part-of: hoodi-validator
+    node-operator.io/use-case: validator-onboarding
+immutable: true
+data:
+  README: |
+    This record is evidence metadata, not a key store.
+    Required external ceremony evidence: validator public key, deposit-data
+    hash, withdrawal-credential approval ID, ceremony approval ID, and a
+    signed custody record. Never put a keystore, password, seed phrase, Vault
+    token, or withdrawal credential in this ConfigMap or in Git.
+  required-evidence-fields: |
+    validator_set_id
+    validator_public_key
+    deposit_data_sha256
+    withdrawal_custody_approval_id
+    ceremony_approval_id
+    custody_record_sha256

@@ -1,0 +1,60 @@
+# The T-3 default-deny policy selects every pod in node-operator. These rules
+# add only the paths this execution client needs. The labelled gateway is an
+# explicit prerequisite; this workload creates neither a gateway nor a route to
+# the public internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nethermind-dns
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nethermind-controlled-egress
+  namespace: node-operator
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              node-operator.io/edge: controlled
+          podSelector:
+            matchLabels:
+              node-operator.io/egress-purpose: hoodi-p2p
+      ports:
+        - protocol: TCP
+          port: 30303
+        - protocol: UDP
+          port: 30303
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              node-operator.io/edge: controlled
+          podSelector:
+            matchLabels:
+              node-operator.io/egress-purpose: hoodi-https
+      ports:
+        - protocol: TCP
+          port: 443

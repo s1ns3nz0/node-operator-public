@@ -1,0 +1,4 @@
+scripts/ci/test-vault-operator-auth-config.sh
+scripts/ci/test-vault-operator-auth-recovery.sh
+scripts/ci/test-vault-operator-session.sh
+scripts/ci/test-vault-injector-canary-guards.py

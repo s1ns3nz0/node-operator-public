@@ -1,0 +1,3 @@
+# Compatibility filename retained for GitOps references. The retired
+# node-operator-dast namespace no longer receives ConfigMaps; signer public
+# trust is installed directly into validator-operations by the companion script.

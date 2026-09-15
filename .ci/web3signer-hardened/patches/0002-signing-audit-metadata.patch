@@ -1,0 +1,592 @@
+diff --git a/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandler.java b/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandler.java
+index fef7b5f..d16a73b 100644
+--- a/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandler.java
++++ b/core/src/main/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandler.java
+@@ -36,8 +36,10 @@ import tech.pegasys.web3signer.slashingprotection.SlashingProtection;
+ 
+ import java.util.List;
+ import java.util.Optional;
++import java.util.UUID;
+ import java.util.function.Consumer;
+ import java.util.function.Function;
++import java.util.regex.Pattern;
+ 
+ import com.fasterxml.jackson.core.JsonProcessingException;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+@@ -67,6 +69,8 @@ public class Eth2SignForIdentifierHandler implements Handler<RoutingContext> {
+   public static final int NOT_FOUND = 404;
+   public static final int BAD_REQUEST = 400;
+   public static final int SLASHING_PROTECTION_ENFORCED = 412;
++  private static final String ABSENT = "absent";
++  private static final Pattern BLS_PUBLIC_KEY = Pattern.compile("^0x[0-9a-f]{96}$");
+ 
+   public Eth2SignForIdentifierHandler(
+       final SignerForIdentifier signerForIdentifier,
+@@ -87,23 +91,29 @@ public class Eth2SignForIdentifierHandler implements Handler<RoutingContext> {
+   @Override
+   public void handle(final RoutingContext routingContext) {
+     try (final TimingContext ignored = httpMetrics.getSigningTimer().startTimer()) {
+-      LOG.trace("{} || {}", routingContext.normalizedPath(), routingContext.body().asString());
++      final String auditRequestId = UUID.randomUUID().toString();
+       final String identifier = routingContext.pathParam("identifier");
+       final Eth2SigningRequestBody eth2SigningRequestBody;
+       try {
+         eth2SigningRequestBody = getSigningRequest(routingContext.body());
+       } catch (final IllegalArgumentException | JsonProcessingException e) {
+-        handleInvalidRequest(routingContext, e);
++        handleInvalidRequest(routingContext, auditRequestId, identifier, null, null);
+         return;
+       }
+ 
+-      final Bytes signingRoot = computeSigningRoot(eth2SigningRequestBody);
+-      if (eth2SigningRequestBody.signingRoot() != null) {
+-        checkArgument(
+-            eth2SigningRequestBody.signingRoot().equals(signingRoot),
+-            "Signing root %s must match signing computed signing root %s from data",
+-            eth2SigningRequestBody.signingRoot(),
+-            signingRoot);
++      final Bytes signingRoot;
++      try {
++        signingRoot = computeSigningRoot(eth2SigningRequestBody);
++        if (eth2SigningRequestBody.signingRoot() != null) {
++          checkArgument(
++              eth2SigningRequestBody.signingRoot().equals(signingRoot),
++              "Signing root %s must match signing computed signing root %s from data",
++              eth2SigningRequestBody.signingRoot(),
++              signingRoot);
++        }
++      } catch (final RuntimeException e) {
++        audit(routingContext, auditRequestId, "INVALID_REQUEST", identifier, eth2SigningRequestBody, null);
++        throw e;
+       }
+ 
+       final String normalisedIdentifier = normaliseIdentifier(identifier);
+@@ -114,13 +124,43 @@ public class Eth2SignForIdentifierHandler implements Handler<RoutingContext> {
+             normalisedIdentifier,
+             signature ->
+                 signWithSlashingProtection(
+-                    routingContext, identifier, eth2SigningRequestBody, signingRoot, signature));
++                    routingContext,
++                    auditRequestId,
++                    identifier,
++                    eth2SigningRequestBody,
++                    signingRoot,
++                    signature),
++            () ->
++                audit(
++                    routingContext,
++                    auditRequestId,
++                    "NOT_FOUND",
++                    identifier,
++                    eth2SigningRequestBody,
++                    signingRoot));
+       } else {
+         handleSigning(
+             routingContext,
+             signingRoot,
+             normalisedIdentifier,
+-            signature -> respondWithSignature(routingContext, signature));
++            signature -> {
++              audit(
++                  routingContext,
++                  auditRequestId,
++                  "SUCCESS",
++                  identifier,
++                  eth2SigningRequestBody,
++                  signingRoot);
++              respondWithSignature(routingContext, signature);
++            },
++            () ->
++                audit(
++                    routingContext,
++                    auditRequestId,
++                    "NOT_FOUND",
++                    identifier,
++                    eth2SigningRequestBody,
++                    signingRoot));
+       }
+     }
+   }
+@@ -129,19 +169,22 @@ public class Eth2SignForIdentifierHandler implements Handler<RoutingContext> {
+       final RoutingContext routingContext,
+       final Bytes signingRoot,
+       final String normalisedIdentifier,
+-      final Consumer<String> signatureConsumer) {
++      final Consumer<String> signatureConsumer,
++      final Runnable missingSignerConsumer) {
+     signerForIdentifier
+         .sign(normalisedIdentifier, signingRoot)
+         .ifPresentOrElse(
+             signatureConsumer,
+             () -> {
+               httpMetrics.getMissingSignerCounter().inc();
++              missingSignerConsumer.run();
+               routingContext.fail(NOT_FOUND);
+             });
+   }
+ 
+   private void signWithSlashingProtection(
+       final RoutingContext routingContext,
++      final String auditRequestId,
+       final String identifier,
+       final Eth2SigningRequestBody eth2SigningRequestBody,
+       final Bytes signingRoot,
+@@ -149,23 +192,109 @@ public class Eth2SignForIdentifierHandler implements Handler<RoutingContext> {
+     try {
+       if (maySign(Bytes.fromHexString(identifier), signingRoot, eth2SigningRequestBody)) {
+         slashingMetrics.incrementSigningsPermitted();
++        audit(
++            routingContext,
++            auditRequestId,
++            "SUCCESS",
++            identifier,
++            eth2SigningRequestBody,
++            signingRoot);
+         respondWithSignature(routingContext, signature);
+       } else {
+         slashingMetrics.incrementSigningsPrevented();
+-        LOG.debug("Signing not allowed due to slashing protection rules failing");
++        audit(
++            routingContext,
++            auditRequestId,
++            "REJECTED_SLASHING",
++            identifier,
++            eth2SigningRequestBody,
++            signingRoot);
+         routingContext.fail(SLASHING_PROTECTION_ENFORCED);
+       }
+     } catch (final IllegalArgumentException e) {
+-      handleInvalidRequest(routingContext, e);
++      handleInvalidRequest(
++          routingContext, auditRequestId, identifier, eth2SigningRequestBody, signingRoot);
+     }
+   }
+ 
+-  private void handleInvalidRequest(final RoutingContext routingContext, final Exception e) {
++  private void handleInvalidRequest(
++      final RoutingContext routingContext,
++      final String auditRequestId,
++      final String identifier,
++      final Eth2SigningRequestBody signingRequest,
++      final Bytes signingRoot) {
+     httpMetrics.getMalformedRequestCounter().inc();
+-    LOG.debug("Invalid signing request - " + routingContext.body().asString(), e);
++    audit(routingContext, auditRequestId, "INVALID_REQUEST", identifier, signingRequest, signingRoot);
+     routingContext.fail(BAD_REQUEST);
+   }
+ 
++  void audit(
++      final RoutingContext routingContext,
++      final String auditRequestId,
++      final String result,
++      final String identifier,
++      final Eth2SigningRequestBody signingRequest,
++      final Bytes signingRoot) {
++    try {
++      writeAudit(routingContext, auditRequestId, result, identifier, signingRequest, signingRoot);
++    } catch (final RuntimeException ignored) {
++      // Optional observability must not change signing or HTTP outcomes. Do
++      // not log the exception or request as a fallback: either may be sensitive.
++    }
++  }
++
++  void writeAudit(
++      final RoutingContext routingContext,
++      final String auditRequestId,
++      final String result,
++      final String identifier,
++      final Eth2SigningRequestBody signingRequest,
++      final Bytes signingRoot) {
++    if (result.equals("INVALID_REQUEST")) {
++      LOG.info("signing_audit audit_request_id={} result=INVALID_REQUEST", auditRequestId);
++      return;
++    }
++    final AttestationData attestation =
++        signingRequest != null && signingRequest.type() == ArtifactType.ATTESTATION
++            ? signingRequest.attestation()
++            : null;
++    final String slot = slot(signingRequest, attestation);
++    final String sourceEpoch = attestation == null ? ABSENT : attestation.source.epoch.toString();
++    final String targetEpoch = attestation == null ? ABSENT : attestation.target.epoch.toString();
++    final String artifactType = signingRequest == null ? ABSENT : signingRequest.type().name();
++    final String root = signingRoot == null ? ABSENT : signingRoot.toHexString();
++    LOG.info(
++        "signing_audit audit_request_id={} result={} public_key={} artifact_type={} signing_root={} slot={} source_epoch={} target_epoch={}",
++        auditRequestId,
++        result,
++        safePublicKey(identifier),
++        artifactType,
++        root,
++        slot,
++        sourceEpoch,
++        targetEpoch);
++  }
++
++  private String slot(
++      final Eth2SigningRequestBody signingRequest, final AttestationData attestation) {
++    if (attestation != null) {
++      return attestation.slot.toString();
++    }
++    if (signingRequest != null
++        && (signingRequest.type() == ArtifactType.BLOCK || signingRequest.type() == ArtifactType.BLOCK_V2)) {
++      return getBlockSlot(signingRequest).toString();
++    }
++    return ABSENT;
++  }
++
++  private String safePublicKey(final String identifier) {
++    if (identifier == null) {
++      return ABSENT;
++    }
++    final String normalized = normaliseIdentifier(identifier);
++    return BLS_PUBLIC_KEY.matcher(normalized).matches() ? normalized : ABSENT;
++  }
++
+   private boolean maySign(
+       final Bytes publicKey,
+       final Bytes signingRoot,
+@@ -359,7 +488,6 @@ public class Eth2SignForIdentifierHandler implements Handler<RoutingContext> {
+   private void respondWithSignature(final RoutingContext routingContext, final String signature) {
+     final String acceptableContentType =
+         getAcceptableContentType(routingContext.parsedHeaders().accept());
+-    LOG.trace("Acceptable Content Type {}", acceptableContentType);
+     final String body =
+         acceptableContentType.equals(JSON_UTF_8)
+             ? new JsonObject().put("signature", signature).encode()
+diff --git a/core/src/test/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandlerAuditTest.java b/core/src/test/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandlerAuditTest.java
+new file mode 100644
+index 0000000..3cb229a
+--- /dev/null
++++ b/core/src/test/java/tech/pegasys/web3signer/core/service/http/handlers/signing/eth2/Eth2SignForIdentifierHandlerAuditTest.java
+@@ -0,0 +1,331 @@
++/*
++ * Copyright 2026 ConsenSys AG.
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ */
++package tech.pegasys.web3signer.core.service.http.handlers.signing.eth2;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.Mockito.mock;
++import static org.mockito.Mockito.when;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.Mockito.verify;
++
++import tech.pegasys.web3signer.core.service.http.handlers.signing.SignerForIdentifier;
++import tech.pegasys.web3signer.core.service.http.SigningObjectMapperFactory;
++import tech.pegasys.web3signer.core.service.http.metrics.HttpApiMetrics;
++import tech.pegasys.teku.infrastructure.unsigned.UInt64;
++import tech.pegasys.teku.spec.Spec;
++import tech.pegasys.teku.networks.Eth2NetworkConfiguration;
++import tech.pegasys.web3signer.core.metrics.SlashingProtectionMetrics;
++import tech.pegasys.web3signer.slashingprotection.SlashingProtection;
++import tech.pegasys.web3signer.core.service.http.ArtifactType;
++import tech.pegasys.web3signer.core.service.http.handlers.signing.eth2.schema.AttestationData;
++import tech.pegasys.web3signer.core.service.http.handlers.signing.eth2.schema.Checkpoint;
++
++import java.util.List;
++import java.util.Optional;
++import java.util.concurrent.CopyOnWriteArrayList;
++
++import io.vertx.ext.web.RoutingContext;
++import io.vertx.ext.web.RequestBody;
++import io.vertx.core.http.HttpServerResponse;
++import io.vertx.ext.web.ParsedHeaderValues;
++import org.apache.logging.log4j.LogManager;
++import org.apache.logging.log4j.core.Logger;
++import org.apache.logging.log4j.core.LogEvent;
++import org.apache.logging.log4j.core.appender.AbstractAppender;
++import org.apache.logging.log4j.core.config.Property;
++import org.apache.tuweni.bytes.Bytes32;
++import org.apache.tuweni.bytes.Bytes;
++import org.mockito.ArgumentCaptor;
++import org.junit.jupiter.api.AfterEach;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.params.ParameterizedTest;
++import org.junit.jupiter.params.provider.CsvSource;
++
++class Eth2SignForIdentifierHandlerAuditTest {
++  private static final String PUBLIC_KEY = "0x" + "11".repeat(48);
++  private CapturingAppender appender;
++  private org.apache.logging.log4j.Level previousLogLevel;
++  private static final Logger LOGGER = (Logger) LogManager.getLogger(Eth2SignForIdentifierHandler.class);
++  private Eth2SignForIdentifierHandler handler;
++  private RoutingContext context;
++
++  @BeforeEach
++  void setUp() {
++    handler =
++        new Eth2SignForIdentifierHandler(
++            null, null, null, Optional.empty(), SigningObjectMapperFactory.createObjectMapper(), mock(Spec.class));
++    context = mock(RoutingContext.class);
++    previousLogLevel = LOGGER.getLevel();
++    LOGGER.setLevel(org.apache.logging.log4j.Level.TRACE);
++    appender = new CapturingAppender();
++    appender.start();
++    LOGGER.addAppender(appender);
++  }
++
++  @AfterEach
++  void tearDown() {
++    LOGGER.removeAppender(appender);
++    appender.stop();
++    LOGGER.setLevel(previousLogLevel);
++  }
++
++  @Test
++  void emits_one_compact_safe_event_for_each_outcome() {
++    final Eth2SigningRequestBody attestation = attestationRequest();
++    handler.audit(context, "11111111-1111-4111-8111-111111111111", "SUCCESS", PUBLIC_KEY, attestation, Bytes32.ZERO);
++    handler.audit(context, "22222222-2222-4222-8222-222222222222", "REJECTED_SLASHING", PUBLIC_KEY, attestation, Bytes32.ZERO);
++    handler.audit(context, "33333333-3333-4333-8333-333333333333", "NOT_FOUND", PUBLIC_KEY, attestation, Bytes32.ZERO);
++    handler.audit(context, "44444444-4444-4444-8444-444444444444", "INVALID_REQUEST", "raw-token-and-signature", null, null);
++
++    final List<String> events =
++        appender.events.stream().map(event -> event.getMessage().getFormattedMessage()).toList();
++    assertThat(events).hasSize(4);
++    assertThat(events.get(0))
++        .contains(
++            "signing_audit audit_request_id=11111111-1111-4111-8111-111111111111 result=SUCCESS",
++            "public_key=" + PUBLIC_KEY,
++            "artifact_type=ATTESTATION",
++            "signing_root=" + Bytes32.ZERO.toHexString(),
++            "slot=3905536 source_epoch=122047 target_epoch=122048");
++    assertThat(events.get(1)).contains("result=REJECTED_SLASHING");
++    assertThat(events.get(2)).contains("result=NOT_FOUND");
++    assertThat(events.get(3)).isEqualTo("signing_audit audit_request_id=44444444-4444-4444-8444-444444444444 result=INVALID_REQUEST");
++    assertThat(String.join("\n", events))
++        .doesNotContain("raw-token-and-signature", "signature=", "authorization", "keystore", "tls", "body=");
++  }
++
++  @Test
++  void invalid_audit_does_not_dereference_partially_parsed_data() {
++    final Eth2SigningRequestBody partial =
++        new Eth2SigningRequestBody(
++            ArtifactType.ATTESTATION,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null,
++            null);
++
++    handler.audit(
++        context,
++        "55555555-5555-4555-8555-555555555555",
++        "INVALID_REQUEST",
++        PUBLIC_KEY,
++        partial,
++        null);
++
++    assertThat(appender.events).hasSize(1);
++    assertThat(appender.events.get(0).getMessage().getFormattedMessage())
++        .isEqualTo("signing_audit audit_request_id=55555555-5555-4555-8555-555555555555 result=INVALID_REQUEST");
++  }
++
++  @Test
++  void handle_emits_one_invalid_event_without_logging_the_malformed_body() {
++    final HttpApiMetrics metrics = mock(HttpApiMetrics.class, org.mockito.Answers.RETURNS_DEEP_STUBS);
++    final SignerForIdentifier signer = mock(SignerForIdentifier.class);
++    final Eth2SignForIdentifierHandler routeHandler =
++        new Eth2SignForIdentifierHandler(
++            signer, metrics, null, Optional.empty(), SigningObjectMapperFactory.createObjectMapper(), mock(Spec.class));
++    final RequestBody body = mock(RequestBody.class);
++    when(body.asString()).thenReturn("raw-token-and-signature");
++    when(context.body()).thenReturn(body);
++    when(context.pathParam("identifier")).thenReturn(PUBLIC_KEY);
++
++    routeHandler.handle(context);
++
++    assertThat(appender.events).hasSize(1);
++    final String event = appender.events.get(0).getMessage().getFormattedMessage();
++    assertThat(event)
++        .matches("signing_audit audit_request_id=[0-9a-f-]{36} result=INVALID_REQUEST")
++        .doesNotContain("raw-token-and-signature", "public_key", "signing_root");
++  }
++
++  @Test
++  void handle_emits_success_for_a_real_deposit_signing_request() {
++    final SignerForIdentifier signer = mock(SignerForIdentifier.class);
++    when(signer.sign(any(), any())).thenReturn(Optional.of("0xsignature"));
++    final Eth2SignForIdentifierHandler routeHandler = routeHandler(signer);
++    configureDepositRequest();
++
++    routeHandler.handle(context);
++
++    assertThat(appender.events).hasSize(1);
++    final String event = appender.events.get(0).getMessage().getFormattedMessage();
++    final ArgumentCaptor<Bytes> signingRoot = ArgumentCaptor.forClass(Bytes.class);
++    verify(signer).sign(any(), signingRoot.capture());
++    assertThat(event)
++        .matches("signing_audit audit_request_id=[0-9a-f-]{36} result=SUCCESS public_key=" + PUBLIC_KEY + " artifact_type=DEPOSIT signing_root=0x[0-9a-f]{64} slot=absent source_epoch=absent target_epoch=absent");
++    assertThat(event).contains("signing_root=" + signingRoot.getValue().toHexString());
++  }
++
++  @Test
++  void handle_emits_not_found_for_a_real_deposit_signing_request() {
++    final SignerForIdentifier signer = mock(SignerForIdentifier.class);
++    when(signer.sign(any(), any())).thenReturn(Optional.empty());
++    final Eth2SignForIdentifierHandler routeHandler = routeHandler(signer);
++    configureDepositRequest();
++
++    routeHandler.handle(context);
++
++    assertThat(appender.events).hasSize(1);
++    assertThat(appender.events.get(0).getMessage().getFormattedMessage())
++        .matches("signing_audit audit_request_id=[0-9a-f-]{36} result=NOT_FOUND public_key=" + PUBLIC_KEY + " artifact_type=DEPOSIT signing_root=0x[0-9a-f]{64} slot=absent source_epoch=absent target_epoch=absent");
++    verify(context).fail(Eth2SignForIdentifierHandler.NOT_FOUND);
++  }
++
++  @Test
++  void handle_rejects_a_forged_deposit_signing_root_before_signing() {
++    final SignerForIdentifier signer = mock(SignerForIdentifier.class);
++    final Eth2SignForIdentifierHandler routeHandler = routeHandler(signer);
++    configureDepositRequest("0x" + "00".repeat(32));
++
++    org.assertj.core.api.Assertions.assertThatThrownBy(() -> routeHandler.handle(context))
++        .isInstanceOf(IllegalArgumentException.class);
++    verify(signer, org.mockito.Mockito.never()).sign(any(), any());
++    assertThat(appender.events).hasSize(1);
++    assertThat(appender.events.get(0).getMessage().getFormattedMessage())
++        .matches("signing_audit audit_request_id=[0-9a-f-]{36} result=INVALID_REQUEST");
++  }
++
++  @ParameterizedTest
++  @CsvSource({"false,false", "false,true", "true,false", "true,true"})
++  void handle_preserves_slashing_outcome_even_when_audit_fails(
++      final boolean permitted, final boolean auditFails) {
++    final SignerForIdentifier signer = mock(SignerForIdentifier.class);
++    when(signer.sign(any(), any())).thenReturn(Optional.of("signature-must-not-be-logged"));
++    final SlashingProtection protection = mock(SlashingProtection.class);
++    when(protection.maySignAttestation(any(), any(), any(), any(), any())).thenReturn(permitted);
++    final HttpApiMetrics metrics = mock(HttpApiMetrics.class, org.mockito.Answers.RETURNS_DEEP_STUBS);
++    final SlashingProtectionMetrics slashingMetrics =
++        mock(SlashingProtectionMetrics.class, org.mockito.Answers.RETURNS_DEEP_STUBS);
++    final Eth2NetworkConfiguration.Builder config = Eth2NetworkConfiguration.builder();
++    config.applyNetworkDefaults("mainnet");
++    final Eth2SignForIdentifierHandler routeHandler = org.mockito.Mockito.spy(new Eth2SignForIdentifierHandler(
++        signer, metrics, slashingMetrics, Optional.of(protection),
++        SigningObjectMapperFactory.createObjectMapper(), config.build().getSpec()));
++    if (auditFails) {
++      org.mockito.Mockito.doThrow(new IllegalStateException("sensitive-audit-error"))
++          .when(routeHandler).writeAudit(any(), org.mockito.ArgumentMatchers.anyString(),
++              org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), any(), any());
++    }
++    final RequestBody body = mock(RequestBody.class);
++    final String zero = "0x" + "00".repeat(32);
++    when(body.asString()).thenReturn(
++        "{\"type\":\"ATTESTATION\",\"fork_info\":{\"fork\":{"
++        + "\"previous_version\":\"0x00000000\",\"current_version\":\"0x00000000\",\"epoch\":\"0\"},"
++        + "\"genesis_validators_root\":\"" + zero + "\"},\"attestation\":{\"slot\":\"64\","
++        + "\"index\":\"0\",\"beacon_block_root\":\"" + zero + "\","
++        + "\"source\":{\"epoch\":\"1\",\"root\":\"" + zero + "\"},"
++        + "\"target\":{\"epoch\":\"2\",\"root\":\"" + zero + "\"}}}");
++    when(context.body()).thenReturn(body);
++    when(context.pathParam("identifier")).thenReturn(PUBLIC_KEY);
++    final ParsedHeaderValues headers = mock(ParsedHeaderValues.class);
++    when(context.parsedHeaders()).thenReturn(headers);
++    when(headers.accept()).thenReturn(List.of());
++    final HttpServerResponse response = mock(HttpServerResponse.class);
++    when(context.response()).thenReturn(response);
++    when(response.putHeader(any(CharSequence.class), any(CharSequence.class)))
++        .thenReturn(response);
++
++    routeHandler.handle(context);
++
++    if (permitted) {
++      verify(response).end("signature-must-not-be-logged");
++      verify(slashingMetrics).incrementSigningsPermitted();
++      verify(context, org.mockito.Mockito.never()).fail(org.mockito.ArgumentMatchers.anyInt());
++    } else {
++      verify(context).fail(Eth2SignForIdentifierHandler.SLASHING_PROTECTION_ENFORCED);
++      verify(slashingMetrics).incrementSigningsPrevented();
++      verify(response, org.mockito.Mockito.never()).end(org.mockito.ArgumentMatchers.anyString());
++    }
++    final ArgumentCaptor<Bytes> root = ArgumentCaptor.forClass(Bytes.class);
++    verify(signer).sign(any(), root.capture());
++    verify(protection).maySignAttestation(any(), org.mockito.ArgumentMatchers.eq(root.getValue()), any(), any(), any());
++    if (auditFails) {
++      assertThat(appender.events).isEmpty();
++      return;
++    }
++    assertThat(appender.events).hasSize(1);
++    assertThat(appender.events.get(0).getMessage().getFormattedMessage())
++        .contains("result=" + (permitted ? "SUCCESS" : "REJECTED_SLASHING"), "signing_root=" + root.getValue().toHexString(),
++            "artifact_type=ATTESTATION", "slot=64 source_epoch=1 target_epoch=2")
++        .doesNotContain("signature-must-not-be-logged", "fork_info", "beacon_block_root");
++  }
++
++  private Eth2SignForIdentifierHandler routeHandler(final SignerForIdentifier signer) {
++    final HttpApiMetrics metrics = mock(HttpApiMetrics.class, org.mockito.Answers.RETURNS_DEEP_STUBS);
++    return new Eth2SignForIdentifierHandler(
++        signer, metrics, null, Optional.empty(), SigningObjectMapperFactory.createObjectMapper(), mock(Spec.class));
++  }
++
++  private void configureDepositRequest() {
++    configureDepositRequest(null);
++  }
++
++  private void configureDepositRequest(final String signingRoot) {
++    final RequestBody body = mock(RequestBody.class);
++    when(body.asString())
++        .thenReturn(
++            "{\"type\":\"DEPOSIT\",\"deposit\":{\"pubkey\":\"" + PUBLIC_KEY
++                + "\",\"withdrawal_credentials\":\"0x" + "00".repeat(32)
++                + "\",\"amount\":\"32000000000\",\"genesis_fork_version\":\"0x00000000\"}"
++                + (signingRoot == null ? "" : ",\"signing_root\":\"" + signingRoot + "\"") + "}");
++    when(context.body()).thenReturn(body);
++    when(context.pathParam("identifier")).thenReturn(PUBLIC_KEY);
++    final ParsedHeaderValues parsedHeaders = mock(ParsedHeaderValues.class);
++    when(context.parsedHeaders()).thenReturn(parsedHeaders);
++    when(parsedHeaders.accept()).thenReturn(List.of());
++    final HttpServerResponse response = mock(HttpServerResponse.class);
++    when(context.response()).thenReturn(response);
++    when(response.putHeader(any(CharSequence.class), any(CharSequence.class))).thenReturn(response);
++  }
++
++  private Eth2SigningRequestBody attestationRequest() {
++    final Checkpoint source = new Checkpoint(UInt64.valueOf(122047), Bytes32.ZERO);
++    final Checkpoint target = new Checkpoint(UInt64.valueOf(122048), Bytes32.ZERO);
++    final AttestationData data =
++        new AttestationData(UInt64.valueOf(3905536), UInt64.ZERO, Bytes32.ZERO, source, target);
++    return new Eth2SigningRequestBody(
++        ArtifactType.ATTESTATION,
++        null,
++        null,
++        null,
++        null,
++        data,
++        null,
++        null,
++        null,
++        null,
++        null,
++        null,
++        null,
++        null,
++        null);
++  }
++
++  private static class CapturingAppender extends AbstractAppender {
++    private final List<LogEvent> events = new CopyOnWriteArrayList<>();
++
++    CapturingAppender() {
++      super("audit-test", null, null, false, Property.EMPTY_ARRAY);
++    }
++
++    @Override
++    public void append(final LogEvent event) {
++      events.add(event.toImmutable());
++    }
++  }
++}

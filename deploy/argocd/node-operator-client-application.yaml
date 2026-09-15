@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: node-operator-client
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-client
+    chart: node-operator-client
+    # 0.1.34 resolves in the immutable private ECR chart repository to
+    # sha256:afcc64172e8a023e9e67b960d20d04357454452218efbe8c5665c11a13d40c8a.
+    targetRevision: 0.1.34
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: node-operator
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

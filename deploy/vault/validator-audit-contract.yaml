@@ -1,0 +1,22 @@
+# This is non-secret declarative metadata for the post-initialization Vault
+# audit ceremony. It must not contain a token, recovery key, or audit payload.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-validator-audit-contract
+  namespace: vault
+  labels:
+    app.kubernetes.io/part-of: node-operator
+immutable: true
+data:
+  required-devices: |
+    validator-file
+    validator-socket
+  required-options: |
+    log_raw=false
+    elide_list_responses=true
+    hmac_accessor=false
+  file-path: /vault/audit/validator-audit.json
+  socket-path: /vault/audit/validator-audit.sock
+  socket-type: unix
+  correlation-field: request.id

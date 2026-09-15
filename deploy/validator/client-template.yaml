@@ -1,0 +1,138 @@
+# Rendered client starts at zero replicas. It cannot sign until the activation
+# gate has verified the exact approved image, private Beacon health, signer TLS,
+# active validator state, and fence ownership.
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-headless
+  namespace: validator-operations
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/component: validator-client, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}
+  ports: [{name: metrics, port: 8081, targetPort: metrics}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client
+  namespace: validator-operations
+  labels:
+    app.kubernetes.io/component: validator-client
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+spec:
+  # Staging only: guarded activation starts exactly one client after deposit,
+  # Beacon readiness and exclusive-signing evidence have been verified.
+  replicas: 0
+  serviceName: validator-REPLACE_WITH_VALIDATOR_SET-client-headless
+  podManagementPolicy: OrderedReady
+  updateStrategy: {type: RollingUpdate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: validator-client
+      node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: validator-client
+        node-operator.io/deployment-name: REPLACE_WITH_DEPLOYMENT_IDENTITY
+        node-operator.io/release-revision: "REPLACE_WITH_RELEASE_IDENTITY"
+        node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+        node-operator.io/vault-client: "true"
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-service-account-token-volume-name: vault-auth
+        vault.hashicorp.com/tls-secret: vault-agent-ca
+        vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
+        vault.hashicorp.com/tls-server-name: vault.vault.svc
+        vault.hashicorp.com/role: hoodi-REPLACE_WITH_VALIDATOR_SET-client-tls
+        vault.hashicorp.com/agent-inject-secret-tls.crt: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/client-tls
+        vault.hashicorp.com/agent-inject-template-tls.crt: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/client-tls" -}}{{ .Data.data.tls_crt_b64 | base64Decode }}{{- end }}
+        vault.hashicorp.com/agent-inject-secret-tls.key: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/client-tls
+        vault.hashicorp.com/agent-inject-template-tls.key: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/client-tls" -}}{{ .Data.data.tls_key_b64 | base64Decode }}{{- end }}
+        vault.hashicorp.com/agent-inject-secret-ca.crt: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/client-tls
+        vault.hashicorp.com/agent-inject-template-ca.crt: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/client-tls" -}}{{ .Data.data.ca_crt_b64 | base64Decode }}{{- end }}
+    spec:
+      serviceAccountName: validator-client
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: validator
+          image: REPLACE_WITH_PRYSM_VALIDATOR_IMAGE
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          args:
+            - --accept-terms-of-use
+            - --hoodi
+            - --datadir=/data
+            - --beacon-rest-api-provider=http://prysm-beacon.node-operator.svc:3500
+            - --validators-external-signer-url=https://validator-REPLACE_WITH_VALIDATOR_SET-remote-signer.validator-operations.svc:9000
+            - --validators-external-signer-public-keys=REPLACE_WITH_VALIDATOR_PUBLIC_KEY
+            - --validators-external-signer-http-client-cert=/vault/secrets/tls.crt
+            - --validators-external-signer-http-client-key=/vault/secrets/tls.key
+            - --validators-external-signer-http-ca-cert=/vault/secrets/ca.crt
+            - --monitoring-host=0.0.0.0
+            - --monitoring-port=8081
+          env:
+            - {name: TMPDIR, value: /tmp}
+          ports: [{name: metrics, containerPort: 8081, protocol: TCP}]
+          volumeMounts:
+            - {name: vault-auth, mountPath: /var/run/secrets/vault.hashicorp.com/serviceaccount, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            - {name: data, mountPath: /data}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 1000}
+      volumes:
+        - name: vault-auth
+          projected:
+            sources:
+              - serviceAccountToken: {audience: vault, expirationSeconds: 600, path: token}
+        - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 256Mi}}
+        - {name: data, emptyDir: {}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-egress
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-client, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: node-operator}}, podSelector: {matchLabels: {app.kubernetes.io/name: prysm-beacon}}}]
+      ports: [{protocol: TCP, port: 3500}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}}]
+      ports: [{protocol: TCP, port: 9001}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-beacon-ingress
+  namespace: node-operator
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: prysm-beacon}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: validator-operations}}
+          podSelector: {matchLabels: {app.kubernetes.io/component: validator-client, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+      ports: [{protocol: TCP, port: 3500}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-client-metrics-ingress
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-client, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: validator-observability}}
+          podSelector: {matchLabels: {app.kubernetes.io/component: validator-metrics-collector}}
+      ports: [{protocol: TCP, port: 8081}]

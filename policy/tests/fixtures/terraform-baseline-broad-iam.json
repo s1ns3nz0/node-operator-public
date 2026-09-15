@@ -1,0 +1,19 @@
+{
+  "baseline": {
+    "eks_clusters": [],
+    "managed_node_groups": [],
+    "iam_policies": [
+      {
+        "address": "aws_iam_role_policy.node_observer",
+        "statements": [
+          {
+            "address": "aws_iam_role_policy.node_observer.statement[0]",
+            "effect": "Allow",
+            "actions": ["ec2:TerminateInstances", "s3:GetObject", "rds-db:connect"],
+            "resources": ["*"]
+          }
+        ]
+      }
+    ]
+  }
+}

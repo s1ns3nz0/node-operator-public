@@ -1,0 +1,19 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nethermind-hoodi-gp3-kms
+  labels:
+    app.kubernetes.io/part-of: hoodi-node
+    node-operator.io/encryption-policy: baseline-ebs-kms
+provisioner: ebs.csi.aws.com
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: gp3
+  iops: "10000"
+  throughput: "250"
+  encrypted: "true"
+  # The T-2 baseline creates this alias. Build integration resolves it in its
+  # approved account; this local-only workload does not access AWS.
+  kmsKeyId: alias/node-operator-baseline-ebs

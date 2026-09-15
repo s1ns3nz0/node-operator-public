@@ -1,0 +1,59 @@
+{
+  "schema_version": 2,
+  "images": [
+    {
+      "component": "prysm-validator",
+      "version": "v7.1.8",
+      "private_image": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-validator-prysm@sha256:7fe554adf0efd27c0e5c5a3f80a3bbbec3d3872626208cf0a003b0dee7761f89",
+      "source": "offchainlabs/prysm-validator@sha256:7fe554adf0efd27c0e5c5a3f80a3bbbec3d3872626208cf0a003b0dee7761f89",
+      "linux_amd64_manifest": "sha256:d8bd148411aa37df0d748ca011e950424a3b66178eabf1778470b6b5f4400307",
+      "release_channel": "upstream-mirror",
+      "mirror_eligible": true,
+      "stage_approved": true,
+      "activation_approved": true,
+      "provenance_status": "upstream-release-mirror",
+      "approval_basis": "Reviewed Prysm v7.1.8 upstream multi-platform OCI index."
+    },
+    {
+      "component": "prysm-validator",
+      "version": "v7.1.8",
+      "private_image": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-validator-prysm@sha256:f35410bedf15c5a7b710769e1c67c5f77e74f75544fd51084f12d47082c457e3",
+      "linux_amd64_manifest": "sha256:f35410bedf15c5a7b710769e1c67c5f77e74f75544fd51084f12d47082c457e3",
+      "release_channel": "manual-native-mtls",
+      "mirror_eligible": false,
+      "stage_approved": true,
+      "activation_approved": true,
+      "provenance_status": "manual-reviewed-live-build",
+      "approval_basis": {
+        "risk_assessment": "plans/2026-09-09-prysm-mtls-build/risk-assessment.md",
+        "source_commit": "51b5a75ebbadf05af22bd2601b5baf7a9e99b66d",
+        "source_lock": ".ci/prysm-mtls/source.lock.json",
+        "mtls_patch_sha256": "05fd3fa777abc99d5f0f66c192dfcca64922f1f1b0b2c35aa337dcb0c60970be",
+        "security_patch_sha256": "6b3b1a3a904ab4ccd6b0a13a859e07b2c0c3b859dcfd4368d31b30408c45f3b8",
+        "docker_tests": "Docker build, validator/node/mTLS tests, and no-network runtime smoke passed; amd64 image pushed to private ECR.",
+        "registry_scan": "Exact private ECR index rescanned Critical 0 / High 0.",
+        "live_tls_positive": "Verified signer GET over HTTP mTLS passed."
+      }
+    },
+    {
+      "component": "prysm-validator",
+      "version": "v7.1.8",
+      "private_image": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-example-baseline-validator-prysm@sha256:2789e2433b907019958b6d558c6e19b27dc9af7fe10e38684a1a64fccb48263d",
+      "linux_amd64_manifest": "sha256:2789e2433b907019958b6d558c6e19b27dc9af7fe10e38684a1a64fccb48263d",
+      "release_channel": "manual-native-mtls",
+      "mirror_eligible": false,
+      "stage_approved": true,
+      "activation_approved": true,
+      "activation_expires_at": "2026-09-21T00:00:00Z",
+      "provenance_status": "manual-reviewed-live-build",
+      "approval_basis": {
+        "direct_activation_decision": "release/direct-hoodi-activation-approval.json",
+        "publication_authorization": "release/prysm-publication-authorization.json",
+        "publication_authorization_activation_approved": false,
+        "task_scoped_activation_approval": true,
+        "fence_image": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-example-baseline-validator-fence@sha256:951312f79c693eae0a9b3e54961701944e0e1339d997f0f3315a25112dcb7fb8",
+        "verified_native_mtls_identity": "current task-scoped live mTLS identity probe passed"
+      }
+    }
+  ]
+}

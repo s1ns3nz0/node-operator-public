@@ -1,0 +1,25 @@
+# Copy outside the extracted release before editing. This is intentionally
+# non-secret. AWS authentication and Terraform's configured state backend are
+# supplied by the controlled execution environment, never by this file.
+aws_account_id = "123456789012"
+name           = "node-operator"
+
+# Hoodi clients need the already approved NAT gateway for peer traffic. The
+# baseline never creates a NAT gateway or a public EKS endpoint.
+hoodi_nat_gateway_id = "nat-0123456789abcdef0"
+
+# Required to reproduce the private GitOps destination used by the client
+# Application. Publication remains a separately reviewed digest-bound action.
+enable_gitops_client_ecr_publisher = true
+
+# Operations access is deliberately excluded from a release deployment. It is
+# created only by the future isolated ops-access Terraform state.
+enable_temporary_ssm_ops_host = false
+temporary_ssm_ops_host_termination_at = ""
+
+# The Argo and Vault bootstrap runners are independently privileged phases.
+# A release baseline must not grant their temporary cluster-admin policy.
+enable_argocd_bootstrap_runner        = false
+enable_argocd_bootstrap_cluster_admin = false
+enable_vault_bootstrap_runner         = false
+enable_vault_bootstrap_cluster_admin  = false

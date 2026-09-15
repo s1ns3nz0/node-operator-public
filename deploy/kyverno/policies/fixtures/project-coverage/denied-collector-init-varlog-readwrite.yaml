@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: project-coverage-collector-init-varlog-readwrite, namespace: validator-observability}
+spec:
+  serviceAccountName: validator-log-collector
+  securityContext: {seccompProfile: {type: RuntimeDefault}}
+  volumes: [{name: varlog, hostPath: {path: /var/log, type: Directory}}]
+  initContainers:
+    - name: init
+      image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-init@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      volumeMounts: [{name: varlog, mountPath: /var/log, readOnly: false}]
+      securityContext: {runAsNonRoot: true, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}, privileged: false, readOnlyRootFilesystem: true}
+      resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {cpu: 100m, memory: 128Mi}}
+  containers:
+    - name: fluent-bit
+      image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-validator-fluent-bit@sha256:a5761fa961cb22dd0875883a4d446b1acd99d4935d77358aa9f50ee177e44fe2
+      volumeMounts: [{name: varlog, mountPath: /var/log, readOnly: true}]
+      securityContext: {runAsNonRoot: false, allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}, privileged: false, readOnlyRootFilesystem: true}
+      resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 512Mi}}

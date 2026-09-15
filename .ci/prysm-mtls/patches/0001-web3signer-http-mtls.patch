@@ -1,0 +1,512 @@
+diff --git a/cmd/validator/flags/flags.go b/cmd/validator/flags/flags.go
+index 4765f18be..8666c46e2 100644
+--- a/cmd/validator/flags/flags.go
++++ b/cmd/validator/flags/flags.go
+@@ -294,6 +294,18 @@ var (
+ 		Value:   "",
+ 		Aliases: []string{"remote-signer-url"},
+ 	}
++	Web3SignerHTTPClientCertFlag = &cli.StringFlag{
++		Name:  "validators-external-signer-http-client-cert",
++		Usage: "Path to the PEM client certificate for mutual TLS with the Web3Signer HTTP API.",
++	}
++	Web3SignerHTTPClientKeyFlag = &cli.StringFlag{
++		Name:  "validators-external-signer-http-client-key",
++		Usage: "Path to the PEM client private key for mutual TLS with the Web3Signer HTTP API.",
++	}
++	Web3SignerHTTPCACertFlag = &cli.StringFlag{
++		Name:  "validators-external-signer-http-ca-cert",
++		Usage: "Path to the PEM CA certificate used to verify the Web3Signer HTTP server.",
++	}
+ 	// Web3SignerPublicValidatorKeysFlag defines a comma-separated list of hex string public keys or external url for web3signer to use for validator signing.
+ 	// example with external url: --validators-external-signer-public-keys= https://web3signer.com/api/v1/eth2/publicKeys
+ 	// example with public key: --validators-external-signer-public-keys=0xa99a...e44c,0xb89b...4a0b
+diff --git a/cmd/validator/main.go b/cmd/validator/main.go
+index e9abef0ce..811b1597b 100644
+--- a/cmd/validator/main.go
++++ b/cmd/validator/main.go
+@@ -77,6 +77,9 @@ var appFlags = []cli.Flag{
+ 	flags.Web3SignerURLFlag,
+ 	flags.Web3SignerPublicValidatorKeysFlag,
+ 	flags.Web3SignerKeyFileFlag,
++	flags.Web3SignerHTTPClientCertFlag,
++	flags.Web3SignerHTTPClientKeyFlag,
++	flags.Web3SignerHTTPCACertFlag,
+ 	flags.SuggestedFeeRecipientFlag,
+ 	flags.ProposerSettingsURLFlag,
+ 	flags.ProposerSettingsFlag,
+diff --git a/cmd/validator/usage.go b/cmd/validator/usage.go
+index 2029de1a7..cc0335653 100644
+--- a/cmd/validator/usage.go
++++ b/cmd/validator/usage.go
+@@ -128,6 +128,9 @@ var appHelpFlagGroups = []flagGroup{
+ 			flags.Web3SignerURLFlag,
+ 			flags.Web3SignerPublicValidatorKeysFlag,
+ 			flags.Web3SignerKeyFileFlag,
++			flags.Web3SignerHTTPClientCertFlag,
++			flags.Web3SignerHTTPClientKeyFlag,
++			flags.Web3SignerHTTPCACertFlag,
+ 		},
+ 	},
+ 	{
+diff --git a/validator/keymanager/remote-web3signer/internal/client.go b/validator/keymanager/remote-web3signer/internal/client.go
+index 0bfa4cda6..8ecc0f291 100644
+--- a/validator/keymanager/remote-web3signer/internal/client.go
++++ b/validator/keymanager/remote-web3signer/internal/client.go
+@@ -3,12 +3,14 @@ package internal
+ import (
+ 	"bytes"
+ 	"context"
++	"crypto/tls"
++	"crypto/x509"
+ 	"encoding/json"
+ 	"fmt"
+ 	"io"
+ 	"net/http"
+-	"net/http/httputil"
+ 	"net/url"
++	"os"
+ 	"strconv"
+ 	"strings"
+ 	"time"
+@@ -46,8 +48,16 @@ type ApiClient struct {
+ 	RestClient *http.Client
+ }
+ 
++// TLSConfig configures mutual TLS exclusively for the Web3Signer HTTP client.
++// It is intentionally separate from Prysm's remote-signer gRPC TLS flags.
++type TLSConfig struct {
++	ClientCertPath string
++	ClientKeyPath  string
++	CACertPath     string
++}
++
+ // NewApiClient method instantiates a new ApiClient object.
+-func NewApiClient(baseEndpoint string) (*ApiClient, error) {
++func NewApiClient(baseEndpoint string, tlsConfigs ...TLSConfig) (*ApiClient, error) {
+ 	u, err := url.ParseRequestURI(baseEndpoint)
+ 	if err != nil {
+ 		return nil, errors.Wrap(err, "invalid format, unable to parse url")
+@@ -55,9 +65,57 @@ func NewApiClient(baseEndpoint string) (*ApiClient, error) {
+ 	if u.Scheme == "" || u.Host == "" {
+ 		return nil, fmt.Errorf("web3signer url must be in the format of http(s)://host:port url used: %v", baseEndpoint)
+ 	}
++	transport := http.DefaultTransport
++	var checkRedirect func(*http.Request, []*http.Request) error
++	if len(tlsConfigs) > 1 {
++		return nil, errors.New("only one web3signer HTTP TLS config may be provided")
++	}
++	if len(tlsConfigs) == 1 {
++		cfg := tlsConfigs[0]
++		configured := 0
++		for _, path := range []string{cfg.ClientCertPath, cfg.ClientKeyPath, cfg.CACertPath} {
++			if path != "" {
++				configured++
++			}
++		}
++		if configured != 0 && configured != 3 {
++			return nil, errors.New("web3signer HTTP mutual TLS requires client certificate, client key, and CA certificate")
++		}
++		if configured == 3 {
++			if u.Scheme != "https" {
++				return nil, errors.New("web3signer HTTP mutual TLS requires an https endpoint")
++			}
++			clientCertificate, err := tls.LoadX509KeyPair(cfg.ClientCertPath, cfg.ClientKeyPath)
++			if err != nil {
++				return nil, errors.Wrap(err, "could not load web3signer HTTP client certificate")
++			}
++			caPEM, err := os.ReadFile(cfg.CACertPath)
++			if err != nil {
++				return nil, errors.Wrap(err, "could not read web3signer HTTP CA certificate")
++			}
++			roots := x509.NewCertPool()
++			if !roots.AppendCertsFromPEM(caPEM) {
++				return nil, errors.New("web3signer HTTP CA certificate contains no valid certificates")
++			}
++			defaultTransport, ok := http.DefaultTransport.(*http.Transport)
++			if !ok {
++				return nil, errors.New("default HTTP transport does not support web3signer mutual TLS")
++			}
++			httpTransport := defaultTransport.Clone()
++			httpTransport.TLSClientConfig = &tls.Config{
++				MinVersion:   tls.VersionTLS12,
++				RootCAs:      roots,
++				Certificates: []tls.Certificate{clientCertificate},
++			}
++			transport = httpTransport
++			checkRedirect = func(_ *http.Request, _ []*http.Request) error {
++				return errors.New("web3signer HTTP mutual TLS redirects are disabled")
++			}
++		}
++	}
+ 	return &ApiClient{
+ 		BaseURL:    u,
+-		RestClient: &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)},
++		RestClient: &http.Client{Transport: otelhttp.NewTransport(transport), CheckRedirect: checkRedirect},
+ 	}, nil
+ }
+ 
+@@ -136,7 +194,6 @@ func (client *ApiClient) GetServerStatus(ctx context.Context) (string, error) {
+ 
+ // doRequest is a utility method for requests.
+ func (client *ApiClient) doRequest(ctx context.Context, httpMethod, fullPath string, body io.Reader) (*http.Response, error) {
+-	var requestDump []byte
+ 	ctx, span := trace.StartSpan(ctx, "remote_web3signer.Client.doRequest")
+ 	defer span.End()
+ 	span.SetAttributes(
+@@ -162,18 +219,10 @@ func (client *ApiClient) doRequest(ctx context.Context, httpMethod, fullPath str
+ 		signRequestDurationSeconds.WithLabelValues(req.Method, strconv.Itoa(resp.StatusCode)).Observe(duration.Seconds())
+ 	}
+ 	if resp.StatusCode != http.StatusOK {
+-		requestDump, err = httputil.DumpRequestOut(req, true)
+-		if err != nil {
+-			return nil, err
+-		}
+-		responseDump, err := httputil.DumpResponse(resp, true)
+-		if err != nil {
+-			return nil, err
+-		}
+ 		log.WithFields(logrus.Fields{
+-			"status":   resp.StatusCode,
+-			"request":  string(requestDump),
+-			"response": string(responseDump),
++			"status": resp.StatusCode,
++			"method": req.Method,
++			"path":   req.URL.EscapedPath(),
+ 		}).Error("Web3signer request failed")
+ 	}
+ 	if resp.StatusCode == http.StatusInternalServerError {
+diff --git a/validator/keymanager/remote-web3signer/internal/client_test.go b/validator/keymanager/remote-web3signer/internal/client_test.go
+index 0e9131746..2fb60b0c9 100644
+--- a/validator/keymanager/remote-web3signer/internal/client_test.go
++++ b/validator/keymanager/remote-web3signer/internal/client_test.go
+@@ -2,16 +2,29 @@ package internal_test
+ 
+ import (
+ 	"bytes"
++	"crypto/rand"
++	"crypto/rsa"
++	"crypto/tls"
++	"crypto/x509"
++	"crypto/x509/pkix"
+ 	"encoding/json"
++	"encoding/pem"
+ 	"fmt"
+ 	"io"
++	"math/big"
+ 	"net/http"
++	"net/http/httptest"
+ 	"net/url"
++	"os"
++	"path/filepath"
++	"sync/atomic"
+ 	"testing"
++	"time"
+ 
+ 	"github.com/OffchainLabs/prysm/v7/testing/require"
+ 	"github.com/OffchainLabs/prysm/v7/validator/keymanager/remote-web3signer/internal"
+ 	"github.com/ethereum/go-ethereum/common/hexutil"
++	logTest "github.com/sirupsen/logrus/hooks/test"
+ 	"github.com/stretchr/testify/assert"
+ )
+ 
+@@ -31,6 +44,147 @@ func TestNewApiClient(t *testing.T) {
+ 	assert.NotNil(t, apiClient)
+ }
+ 
++func TestNewApiClientMutualTLS(t *testing.T) {
++	ca, caKey, caPath := makeTestCertificateAuthority(t)
++	serverCert, _, _ := makeTestCertificate(t, ca, caKey, "localhost", true, caPath)
++	_, clientCertPath, clientKeyPath := makeTestCertificate(t, ca, caKey, "client", false, caPath)
++
++	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++		w.WriteHeader(http.StatusNoContent)
++	}))
++	server.TLS = &tls.Config{
++		MinVersion:   tls.VersionTLS12,
++		Certificates: []tls.Certificate{serverCert},
++		ClientAuth:   tls.RequireAndVerifyClientCert,
++		ClientCAs:    certPool(t, caPath),
++	}
++	server.StartTLS()
++	t.Cleanup(server.Close)
++	serverURL, err := url.Parse(server.URL)
++	require.NoError(t, err)
++	serverURL.Host = "localhost:" + serverURL.Port()
++
++	client, err := internal.NewApiClient(serverURL.String(), internal.TLSConfig{
++		ClientCertPath: clientCertPath,
++		ClientKeyPath:  clientKeyPath,
++		CACertPath:     caPath,
++	})
++	require.NoError(t, err)
++	response, err := client.RestClient.Get(serverURL.String())
++	require.NoError(t, err)
++	require.Equal(t, http.StatusNoContent, response.StatusCode)
++	require.NoError(t, response.Body.Close())
++
++	wrongHostClient, err := internal.NewApiClient(server.URL, internal.TLSConfig{ClientCertPath: clientCertPath, ClientKeyPath: clientKeyPath, CACertPath: caPath})
++	require.NoError(t, err)
++	_, err = wrongHostClient.RestClient.Get(server.URL)
++	require.ErrorContains(t, "certificate", err)
++}
++
++func TestNewApiClientMutualTLSRejectsRedirect(t *testing.T) {
++	ca, caKey, caPath := makeTestCertificateAuthority(t)
++	serverCert, _, _ := makeTestCertificate(t, ca, caKey, "localhost", true, caPath)
++	_, clientCertPath, clientKeyPath := makeTestCertificate(t, ca, caKey, "client", false, caPath)
++	var destinationRequests atomic.Int32
++	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++		destinationRequests.Add(1)
++		w.WriteHeader(http.StatusNoContent)
++	}))
++	t.Cleanup(destination.Close)
++	redirector := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		http.Redirect(w, r, destination.URL, http.StatusTemporaryRedirect)
++	}))
++	redirector.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: certPool(t, caPath)}
++	redirector.StartTLS()
++	t.Cleanup(redirector.Close)
++	redirectURL, err := url.Parse(redirector.URL)
++	require.NoError(t, err)
++	redirectURL.Host = "localhost:" + redirectURL.Port()
++	client, err := internal.NewApiClient(redirectURL.String(), internal.TLSConfig{ClientCertPath: clientCertPath, ClientKeyPath: clientKeyPath, CACertPath: caPath})
++	require.NoError(t, err)
++	_, err = client.RestClient.Get(redirectURL.String())
++	require.ErrorContains(t, "redirects are disabled", err)
++	require.Equal(t, int32(0), destinationRequests.Load())
++}
++
++func TestNewApiClientMutualTLSRejectsWrongTrust(t *testing.T) {
++	serverCA, serverCAKey, serverCAPath := makeTestCertificateAuthority(t)
++	serverCert, _, _ := makeTestCertificate(t, serverCA, serverCAKey, "localhost", true, serverCAPath)
++	_, trustedClientCertPath, trustedClientKeyPath := makeTestCertificate(t, serverCA, serverCAKey, "trusted-client", false, serverCAPath)
++	otherCA, otherCAKey, otherCAPath := makeTestCertificateAuthority(t)
++	_, untrustedClientCertPath, untrustedClientKeyPath := makeTestCertificate(t, otherCA, otherCAKey, "untrusted-client", false, otherCAPath)
++	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
++	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: certPool(t, serverCAPath)}
++	server.StartTLS()
++	t.Cleanup(server.Close)
++	serverURL, err := url.Parse(server.URL)
++	require.NoError(t, err)
++	serverURL.Host = "localhost:" + serverURL.Port()
++
++	wrongCAClient, err := internal.NewApiClient(serverURL.String(), internal.TLSConfig{ClientCertPath: trustedClientCertPath, ClientKeyPath: trustedClientKeyPath, CACertPath: otherCAPath})
++	require.NoError(t, err)
++	_, err = wrongCAClient.RestClient.Get(serverURL.String())
++	require.ErrorContains(t, "certificate", err)
++
++	untrustedClient, err := internal.NewApiClient(serverURL.String(), internal.TLSConfig{ClientCertPath: untrustedClientCertPath, ClientKeyPath: untrustedClientKeyPath, CACertPath: serverCAPath})
++	require.NoError(t, err)
++	_, err = untrustedClient.RestClient.Get(serverURL.String())
++	require.NotNil(t, err)
++}
++
++func TestNewApiClientRejectsIncompleteMutualTLS(t *testing.T) {
++	_, err := internal.NewApiClient("https://localhost:9000", internal.TLSConfig{ClientCertPath: "client.pem"})
++	require.ErrorContains(t, "requires client certificate, client key, and CA certificate", err)
++	_, err = internal.NewApiClient("http://localhost:9000", internal.TLSConfig{ClientCertPath: "client.pem", ClientKeyPath: "client-key.pem", CACertPath: "ca.pem"})
++	require.ErrorContains(t, "requires an https endpoint", err)
++}
++
++func makeTestCertificateAuthority(t *testing.T) (*x509.Certificate, *rsa.PrivateKey, string) {
++	t.Helper()
++	key, err := rsa.GenerateKey(rand.Reader, 2048)
++	require.NoError(t, err)
++	now := time.Now()
++	certificate := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test CA"}, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
++	der, err := x509.CreateCertificate(rand.Reader, certificate, certificate, &key.PublicKey, key)
++	require.NoError(t, err)
++	path := filepath.Join(t.TempDir(), "ca.pem")
++	require.NoError(t, os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
++	return certificate, key, path
++}
++
++func makeTestCertificate(t *testing.T, ca *x509.Certificate, caKey *rsa.PrivateKey, name string, server bool, _ string) (tls.Certificate, string, string) {
++	t.Helper()
++	key, err := rsa.GenerateKey(rand.Reader, 2048)
++	require.NoError(t, err)
++	now := time.Now()
++	template := &x509.Certificate{SerialNumber: big.NewInt(now.UnixNano()), Subject: pkix.Name{CommonName: name}, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature}
++	if server {
++		template.DNSNames = []string{name}
++		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
++	} else {
++		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
++	}
++	der, err := x509.CreateCertificate(rand.Reader, template, ca, &key.PublicKey, caKey)
++	require.NoError(t, err)
++	dir := t.TempDir()
++	certPath := filepath.Join(dir, name+".pem")
++	keyPath := filepath.Join(dir, name+"-key.pem")
++	require.NoError(t, os.WriteFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
++	require.NoError(t, os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0o600))
++	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
++	require.NoError(t, err)
++	return certificate, certPath, keyPath
++}
++
++func certPool(t *testing.T, path string) *x509.CertPool {
++	t.Helper()
++	contents, err := os.ReadFile(path)
++	require.NoError(t, err)
++	pool := x509.NewCertPool()
++	require.Equal(t, true, pool.AppendCertsFromPEM(contents))
++	return pool
++}
++
+ func TestClient_Sign_HappyPath(t *testing.T) {
+ 	jsonSig := `0xb3baa751d0a9132cfe93e4e3d5ff9075111100e3789dca219ade5a24d27e19d16b3353149da1833e9b691bb38634e8dc04469be7032132906c927d7e1a49b414730612877bc6b2810c8f202daf793d1ab0d6b5cb21d52f9e52e883859887a5d9`
+ 	// create a new reader with that JSON
+@@ -80,6 +234,8 @@ func TestClient_Sign_HappyPath_Jsontype(t *testing.T) {
+ }
+ 
+ func TestClient_Sign_500(t *testing.T) {
++	logHook := logTest.NewGlobal()
++	secret := "must-not-appear-in-error-logs"
+ 	jsonSig := `0xb3baa751d0a9132cfe93e4e3d5ff9075111100e3789dca219ade5a24d27e19d16b3353149da1833e9b691bb38634e8dc04469be7032132906c927d7e1a49b414730612877bc6b2810c8f202daf793d1ab0d6b5cb21d52f9e52e883859887a5d9`
+ 	// create a new reader with that JSON
+ 	r := io.NopCloser(bytes.NewReader([]byte(jsonSig)))
+@@ -90,11 +246,13 @@ func TestClient_Sign_500(t *testing.T) {
+ 	u, err := url.Parse("example.com")
+ 	assert.NoError(t, err)
+ 	cl := internal.ApiClient{BaseURL: u, RestClient: &http.Client{Transport: mock}}
+-	jsonRequest, err := json.Marshal(`{message: "hello"}`)
++	jsonRequest, err := json.Marshal(map[string]string{"message": secret})
+ 	assert.NoError(t, err)
+ 	resp, err := cl.Sign(t.Context(), "a2b5aaad9c6efefe7bb9b1243a043404f3362937cfb6b31833929833173f476630ea2cfeb0d9ddf15f97ca8685948820", jsonRequest)
+ 	assert.NotNil(t, err)
+ 	assert.Nil(t, resp)
++	require.LogsDoNotContain(t, logHook, secret)
++	require.LogsDoNotContain(t, logHook, jsonSig)
+ 
+ }
+ 
+diff --git a/validator/keymanager/remote-web3signer/keymanager.go b/validator/keymanager/remote-web3signer/keymanager.go
+index 3a2f63333..3e8b6ba91 100644
+--- a/validator/keymanager/remote-web3signer/keymanager.go
++++ b/validator/keymanager/remote-web3signer/keymanager.go
+@@ -45,6 +45,9 @@ type SetupConfig struct {
+ 	KeyFilePath           string
+ 	BaseEndpoint          string
+ 	GenesisValidatorsRoot []byte
++	HTTPClientCertPath    string
++	HTTPClientKeyPath     string
++	HTTPCAcertPath        string
+ 
+ 	// Either URL or keylist must be set.
+ 	// If the URL is set, the keymanager will fetch the public keys from the URL.
+@@ -77,7 +80,11 @@ func NewKeymanager(ctx context.Context, cfg *SetupConfig) (*Keymanager, error) {
+ 	if cfg.BaseEndpoint == "" || !bytesutil.IsValidRoot(cfg.GenesisValidatorsRoot) {
+ 		return nil, fmt.Errorf("invalid setup config, one or more configs are empty: BaseEndpoint: %v, GenesisValidatorsRoot: %#x", cfg.BaseEndpoint, cfg.GenesisValidatorsRoot)
+ 	}
+-	client, err := internal.NewApiClient(cfg.BaseEndpoint)
++	client, err := internal.NewApiClient(cfg.BaseEndpoint, internal.TLSConfig{
++		ClientCertPath: cfg.HTTPClientCertPath,
++		ClientKeyPath:  cfg.HTTPClientKeyPath,
++		CACertPath:     cfg.HTTPCAcertPath,
++	})
+ 	if err != nil {
+ 		return nil, errors.Wrap(err, "could not create apiClient")
+ 	}
+diff --git a/validator/node/node.go b/validator/node/node.go
+index fa745d216..42141ff3f 100644
+--- a/validator/node/node.go
++++ b/validator/node/node.go
+@@ -433,6 +433,14 @@ func (c *ValidatorClient) registerValidatorService(cliCtx *cli.Context) error {
+ 
+ func Web3SignerConfig(cliCtx *cli.Context) (*remoteweb3signer.SetupConfig, error) {
+ 	var web3signerConfig *remoteweb3signer.SetupConfig
++	tlsFlagSet := []bool{
++		cliCtx.IsSet(flags.Web3SignerHTTPClientCertFlag.Name),
++		cliCtx.IsSet(flags.Web3SignerHTTPClientKeyFlag.Name),
++		cliCtx.IsSet(flags.Web3SignerHTTPCACertFlag.Name),
++	}
++	if (tlsFlagSet[0] || tlsFlagSet[1] || tlsFlagSet[2]) && !cliCtx.IsSet(flags.Web3SignerURLFlag.Name) {
++		return nil, errors.New("web3signer HTTP mutual TLS requires the external signer URL")
++	}
+ 	if cliCtx.IsSet(flags.Web3SignerURLFlag.Name) {
+ 		urlStr := cliCtx.String(flags.Web3SignerURLFlag.Name)
+ 		u, err := url.ParseRequestURI(urlStr)
+@@ -446,6 +454,20 @@ func Web3SignerConfig(cliCtx *cli.Context) (*remoteweb3signer.SetupConfig, error
+ 			BaseEndpoint:          u.String(),
+ 			GenesisValidatorsRoot: nil,
+ 		}
++		if tlsFlagSet[0] || tlsFlagSet[1] || tlsFlagSet[2] {
++			if !tlsFlagSet[0] || !tlsFlagSet[1] || !tlsFlagSet[2] {
++				return nil, errors.New("web3signer HTTP mutual TLS requires all client certificate, client key, and CA certificate flags")
++			}
++			if u.Scheme != "https" {
++				return nil, errors.New("web3signer HTTP mutual TLS requires an https endpoint")
++			}
++			web3signerConfig.HTTPClientCertPath = cliCtx.String(flags.Web3SignerHTTPClientCertFlag.Name)
++			web3signerConfig.HTTPClientKeyPath = cliCtx.String(flags.Web3SignerHTTPClientKeyFlag.Name)
++			web3signerConfig.HTTPCAcertPath = cliCtx.String(flags.Web3SignerHTTPCACertFlag.Name)
++			if web3signerConfig.HTTPClientCertPath == "" || web3signerConfig.HTTPClientKeyPath == "" || web3signerConfig.HTTPCAcertPath == "" {
++				return nil, errors.New("web3signer HTTP mutual TLS paths must not be empty")
++			}
++		}
+ 		if cliCtx.IsSet(flags.WalletPasswordFileFlag.Name) {
+ 			log.Warnf("%s was provided while using web3signer and will be ignored", flags.WalletPasswordFileFlag.Name)
+ 		}
+diff --git a/validator/node/node_test.go b/validator/node/node_test.go
+index ae11fcd36..51215ce93 100644
+--- a/validator/node/node_test.go
++++ b/validator/node/node_test.go
+@@ -302,6 +302,56 @@ func TestWeb3SignerConfig(t *testing.T) {
+ 	}
+ }
+ 
++func TestWeb3SignerConfigMutualTLS(t *testing.T) {
++	newContext := func(t *testing.T, values map[string]string) *cli.Context {
++		t.Helper()
++		set := flag.NewFlagSet(t.Name(), flag.ContinueOnError)
++		for _, cliFlag := range []*cli.StringFlag{flags.Web3SignerURLFlag, flags.Web3SignerHTTPClientCertFlag, flags.Web3SignerHTTPClientKeyFlag, flags.Web3SignerHTTPCACertFlag} {
++			require.NoError(t, cliFlag.Apply(set))
++		}
++		for name, value := range values {
++			require.NoError(t, set.Set(name, value))
++		}
++		return cli.NewContext(&cli.App{}, set, nil)
++	}
++
++	t.Run("propagates dedicated HTTP paths", func(t *testing.T) {
++		config, err := Web3SignerConfig(newContext(t, map[string]string{
++			flags.Web3SignerURLFlag.Name:            "https://signer.example:9000",
++			flags.Web3SignerHTTPClientCertFlag.Name: "/tls/client.crt",
++			flags.Web3SignerHTTPClientKeyFlag.Name:  "/tls/client.key",
++			flags.Web3SignerHTTPCACertFlag.Name:     "/tls/ca.crt",
++		}))
++		require.NoError(t, err)
++		require.Equal(t, "/tls/client.crt", config.HTTPClientCertPath)
++		require.Equal(t, "/tls/client.key", config.HTTPClientKeyPath)
++		require.Equal(t, "/tls/ca.crt", config.HTTPCAcertPath)
++	})
++
++	for name, values := range map[string]map[string]string{
++		"rejects partial config": {
++			flags.Web3SignerURLFlag.Name:            "https://signer.example:9000",
++			flags.Web3SignerHTTPClientCertFlag.Name: "/tls/client.crt",
++		},
++		"rejects plaintext endpoint": {
++			flags.Web3SignerURLFlag.Name:            "http://signer.example:9000",
++			flags.Web3SignerHTTPClientCertFlag.Name: "/tls/client.crt",
++			flags.Web3SignerHTTPClientKeyFlag.Name:  "/tls/client.key",
++			flags.Web3SignerHTTPCACertFlag.Name:     "/tls/ca.crt",
++		},
++		"rejects TLS config without endpoint": {
++			flags.Web3SignerHTTPClientCertFlag.Name: "/tls/client.crt",
++			flags.Web3SignerHTTPClientKeyFlag.Name:  "/tls/client.key",
++			flags.Web3SignerHTTPCACertFlag.Name:     "/tls/ca.crt",
++		},
++	} {
++		t.Run(name, func(t *testing.T) {
++			_, err := Web3SignerConfig(newContext(t, values))
++			require.NotNil(t, err)
++		})
++	}
++}
++
+ func Test_parseBeaconApiHeaders(t *testing.T) {
+ 	t.Run("ok", func(t *testing.T) {
+ 		h := parseBeaconApiHeaders("key1=value1,key1=value2,key2=value3")

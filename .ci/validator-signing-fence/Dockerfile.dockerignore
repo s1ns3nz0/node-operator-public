@@ -1,0 +1,4 @@
+*
+!go.mod
+!cmd/validator-signing-fence/main.go
+!cmd/validator-signing-fence/main_test.go

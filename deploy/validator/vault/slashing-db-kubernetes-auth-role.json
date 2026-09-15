@@ -1,0 +1,10 @@
+{
+  "role_type": "jwt",
+  "bound_service_account_names": ["validator-slashing-db"],
+  "bound_service_account_namespaces": ["validator-operations"],
+  "audience": "vault",
+  "token_policies": ["REPLACE_WITH_SLASHING_DB_POLICY"],
+  "token_ttl": "5m",
+  "token_max_ttl": "10m",
+  "token_no_default_policy": true
+}

@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "eks_clusters": [],
+    "managed_node_groups": [
+      {
+        "address": "aws_eks_node_group.operators",
+        "instance_types": ["m7i.large"],
+        "scaling": {"min_size": 1, "desired_size": 1, "max_size": 4},
+        "availability_zones": ["ap-northeast-2a", "ap-northeast-2a"],
+        "public_ip_association": true,
+        "private_subnet_ids": ["subnet-private-a"]
+      }
+    ],
+    "iam_policies": []
+  }
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Knowledge steward"
+  short_description: "Orient from live repository evidence"
+  default_prompt: "Use $knowledge-steward to orient me to the repository's current state."
+policy:
+  allow_implicit_invocation: false

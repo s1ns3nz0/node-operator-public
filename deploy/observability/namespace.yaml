@@ -1,0 +1,11 @@
+# A node log collector needs host log mounts; confine that unavoidable privilege
+# to this namespace and to the reviewed DaemonSet renderer only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: validator-observability
+  labels:
+    node-operator.io/security-domain: validator-observability
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

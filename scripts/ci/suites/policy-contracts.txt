@@ -1,0 +1,14 @@
+# Evidence, review and workflow contracts; no live infrastructure access.
+scripts/ci/test-normalizer.sh
+scripts/ci/test-pr-gate.sh
+scripts/ci/test-pr-baseline-findings.sh
+scripts/ci/test-dast-target-contract.sh
+scripts/ci/test-ci-suite-ownership.py
+scripts/ci/test-ci-presentation.py
+scripts/ci/test-ci-entrypoints.py
+scripts/ci/test-image-release-selection.py
+scripts/ci/test-private-ecr-inputs.py
+scripts/ci/test-refresh-review-evidence.py
+scripts/ci/test-review-refresh-flow.py
+scripts/ci/test-workflow-consolidation.py
+scripts/ci/test-mirror-digest-integrity.py

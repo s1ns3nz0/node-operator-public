@@ -1,0 +1,105 @@
+--- a/plugins/inputs/prometheus/target_allocator.go
++++ b/plugins/inputs/prometheus/target_allocator.go
+@@ -79,7 +79,7 @@
+ 	return &cfg, nil
+ }
+ 
+-func createTargetAllocatorManager(filename string, logger *slog.Logger, logLevel *promslog.AllowedLevel, sm *scrape.Manager, dm *discovery.Manager) *TargetAllocatorManager {
++func createTargetAllocatorManager(filename string, logger *slog.Logger, logLevel *promslog.Level, sm *scrape.Manager, dm *discovery.Manager) *TargetAllocatorManager {
+ 	tam := TargetAllocatorManager{
+ 		enabled:             false,
+ 		manager:             nil,
+@@ -107,7 +107,7 @@
+ 	return &tam
+ }
+ 
+-func (tam *TargetAllocatorManager) loadManager(logLevel *promslog.AllowedLevel) {
++func (tam *TargetAllocatorManager) loadManager(logLevel *promslog.Level) {
+ 	zapLogger, err := createZapLogger(logLevel)
+ 	if err != nil {
+ 		tam.logger.Error("Error creating zap logger", "error", err)
+@@ -125,7 +125,7 @@
+ 	tam.manager = tamanager.NewManager(receiverSettings, tam.config.TargetAllocator, (*promconfig.Config)(tam.config.PrometheusConfig), false)
+ }
+ 
+-func createZapLogger(level *promslog.AllowedLevel) (*zap.Logger, error) {
++func createZapLogger(level *promslog.Level) (*zap.Logger, error) {
+ 	zapLevel, err := zapcore.ParseLevel(level.String())
+ 	if err != nil {
+ 		err = fmt.Errorf("error parsing level: %v. Defaulting to info", err)
+@@ -152,10 +152,10 @@
+ 		return nil // no target allocator return
+ 	}
+ 	//has target allocator
+-	tam.config.TargetAllocator.TLSSetting.CAFile = DefaultTLSCaFilePath
+-	tam.config.TargetAllocator.TLSSetting.CertFile = DefaultTLSCertFilePath
+-	tam.config.TargetAllocator.TLSSetting.KeyFile = DefaultTLSKeyFilePath
+-	tam.config.TargetAllocator.TLSSetting.ReloadInterval = DEFAULT_TLS_RELOAD_INTERVAL_SECONDS
++	tam.config.TargetAllocator.TLS.CAFile = DefaultTLSCaFilePath
++	tam.config.TargetAllocator.TLS.CertFile = DefaultTLSCertFilePath
++	tam.config.TargetAllocator.TLS.KeyFile = DefaultTLSKeyFilePath
++	tam.config.TargetAllocator.TLS.ReloadInterval = DEFAULT_TLS_RELOAD_INTERVAL_SECONDS
+ 	return nil
+ }
+ func (tam *TargetAllocatorManager) Run() error {
+--- a/plugins/inputs/prometheus/metrics_receiver.go
++++ b/plugins/inputs/prometheus/metrics_receiver.go
+@@ -78,14 +78,14 @@
+ func (ma *metricAppender) Append(_ storage.SeriesRef, ls labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
+ 	metricName := ""
+ 
+-	labelMap := make(map[string]string, len(ls))
+-	for _, l := range ls {
++	labelMap := make(map[string]string, ls.Len())
++	ls.Range(func(l labels.Label) {
+ 		if l.Name == model.MetricNameLabel {
+ 			metricName = l.Value
+-			continue
++			return
+ 		}
+ 		labelMap[l.Name] = l.Value
+-	}
++	})
+ 
+ 	if metricName == "" {
+ 		// The error should never happen, print log here for debugging
+--- a/plugins/inputs/prometheus/metrics_type_handler.go
++++ b/plugins/inputs/prometheus/metrics_type_handler.go
+@@ -10,6 +10,7 @@
+ 	"strings"
+ 
+ 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
++	"github.com/prometheus/prometheus/model/labels"
+ 	"github.com/prometheus/prometheus/scrape"
+ )
+ 
+@@ -89,7 +90,8 @@
+ 
+ 	// from the same targetGroup, instance is not going to be duplicated
+ 	for _, target := range targetGroup {
+-		if target.DiscoveredLabels().Get(savedScrapeInstanceLabel) == instance || target.DiscoveredLabels().Get(scrapeInstanceLabel) == instance {
++		discoveredLabels := target.DiscoveredLabels(labels.NewBuilder(labels.EmptyLabels()))
++		if discoveredLabels.Get(savedScrapeInstanceLabel) == instance || discoveredLabels.Get(scrapeInstanceLabel) == instance {
+ 			return &mCache{target}, nil
+ 		}
+ 	}
+--- a/plugins/inputs/prometheus/start.go
++++ b/plugins/inputs/prometheus/start.go
+@@ -79,7 +79,7 @@
+ }
+ 
+ func Start(configFilePath string, receiver storage.Appendable, shutDownChan chan interface{}, wg *sync.WaitGroup, mth *metricsTypeHandler) {
+-	logLevel := &promslog.AllowedLevel{}
++	logLevel := promslog.NewLevel()
+ 	logLevel.Set("info")
+ 
+ 	if os.Getenv("DEBUG") != "" {
+@@ -87,7 +87,7 @@
+ 		runtime.SetMutexProfileFraction(20)
+ 		logLevel.Set("debug")
+ 	}
+-	logFormat := &promslog.AllowedFormat{}
++	logFormat := promslog.NewFormat()
+ 	_ = logFormat.Set("logfmt")
+ 
+ 	cfg := struct {

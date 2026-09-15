@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Node Operator harness configuration",
+  "type": "object",
+  "required": ["schemaVersion", "project", "paperthin", "models", "policies", "adapters"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "project": { "type": "object", "required": ["name", "description"], "properties": { "name": { "type": "string", "minLength": 1 }, "description": { "type": "string" } } },
+    "paperthin": { "type": "object", "required": ["source", "ref"], "properties": { "source": { "type": "string", "minLength": 1 }, "ref": { "type": "string", "minLength": 1 } } },
+    "models": { "type": "object", "required": ["tiers", "fallback", "recordFallbacks"], "properties": { "tiers": { "type": "object", "required": ["sol", "terra", "luna"] }, "fallback": { "type": "string" }, "recordFallbacks": { "type": "boolean" } } },
+    "policies": {
+      "type": "object",
+      "required": ["externalActions", "worktreesRequiredForMutations", "humanApprovalForPromotedLearnings", "workflowRouting", "testPortability", "promptIntake", "skillExecution", "ambiguityResolution", "admissibility", "roleQuality", "knowledgeSteward", "requirementsSteward", "solidReview", "showDontTell"],
+      "properties": {
+        "ambiguityResolution": { "type": "object", "required": ["enabled", "thinAskResolver", "intentChecker", "riskCarver", "interviewer", "consolidator", "decisionChallenge", "adversarialPlanCheck", "hateCheckpoints", "requiresExplicitUserAcceptance", "safeCorrectionAttemptsBeforeInterview", "blockAffectedNodeWhenUnresolved", "decisionRecordsDirectory", "productSpecsDirectory"] },
+        "promptIntake": { "type": "object", "required": ["enabled", "handler", "when", "mode", "blocksWorkUntilComplete"], "properties": { "enabled": {"type": "boolean"}, "handler": {"const": "grill-me"}, "when": {"const": "full-workflow"}, "mode": {"const": "one-question-at-a-time"}, "blocksWorkUntilComplete": {"type": "boolean"} } },
+        "workflowRouting": { "type": "object", "required": ["defaultMode", "fullWorkflowTriggers", "lightweight"], "properties": { "defaultMode": {"const": "lightweight"}, "fullWorkflowTriggers": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "lightweight": {"type": "object", "required": ["maxToolCalls", "maxValidationCommands", "delegation", "durableArtifacts"]} } },
+        "testPortability": {"type": "object", "required": ["requiredPlatform", "vendorNeutral", "allowLocalOnlyRequired"]},
+        "skillExecution": { "type": "object", "required": ["enabled", "commands", "requiredSkills", "conditionalSkills"], "properties": { "enabled": {"type": "boolean"}, "commands": { "type": "object", "additionalProperties": { "type": "object", "required": ["command", "args"], "properties": { "command": {"type": "string", "minLength": 1}, "args": {"type": "array", "items": {"type": "string"}} } } }, "requiredSkills": {"type": "array", "items": {"type": "string", "minLength": 1}}, "conditionalSkills": {"type": "array", "items": {"type": "string", "minLength": 1}} } },
+        "admissibility": { "type": "object", "required": ["enabled", "orchestrator", "runAfterDurableArtifactChange", "requiredWhen", "unexplainable", "unreasonable", "unacceptable", "safeCorrectionAttemptsBeforeEscalation", "recordSkippedChecks"] },
+        "roleQuality": { "type": "object", "required": ["luna", "terra", "sol"] },
+        "knowledgeSteward": { "type": "object", "required": ["enabled", "invocation", "defaultTier", "readOnly", "defaultPersistence", "canonicalWikiDirectory", "reentrySkill", "driftAudit", "auditTriggers"] },
+        "requirementsSteward": { "type": "object", "required": ["enabled", "invocation", "defaultTier", "canonicalDirectory", "usesProcess", "opensGitHubIssue", "requiresExplicitApproval", "taskRequiresApprovedProductSpec"] },
+        "solidReview": { "type": "object", "required": ["enabled", "appliesTo", "defaultTier", "preImplementationRequired", "integrationRerunTriggers", "reportFile", "blocksMaterialFindings"] },
+        "showDontTell": { "type": "object", "required": ["enabled", "requiredForObservableBehavior", "independentReview", "commitSmallArtifacts", "userAcceptanceBlocksOnlyWhenConfigured", "reportFile"] }
+      }
+    },
+    "graphs": {"type": "object", "required": ["directory", "requiredWhen"]},
+    "adapters": { "type": "object", "required": ["active", "definitions"], "properties": { "active": { "type": "array", "items": { "type": "string" } }, "definitions": { "type": "object" } } }
+  }
+}

@@ -1,0 +1,8 @@
+# Copy outside the extracted release and edit only non-secret values.
+aws_account_id = "123456789012"
+name           = "node-operator"
+
+# Leave null to use the generated globally unique bucket name for this fresh
+# deployment. Backend principals are reviewed IAM role ARNs, never credentials.
+state_bucket_name      = null
+backend_principal_arns = []

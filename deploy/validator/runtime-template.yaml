@@ -1,0 +1,283 @@
+# Render only with scripts/ops/render-hoodi-validator-runtime.sh. The template
+# is intentionally excluded from kustomization so placeholders can never be
+# applied as a signing workload.
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-slashing-db
+  namespace: validator-operations
+spec:
+  selector:
+    app.kubernetes.io/component: validator-slashing-db
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-slashing-db
+  namespace: validator-operations
+spec:
+  serviceName: validator-REPLACE_WITH_VALIDATOR_SET-slashing-db
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: validator-slashing-db
+      node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: validator-slashing-db
+        node-operator.io/deployment-name: REPLACE_WITH_DEPLOYMENT_IDENTITY
+        node-operator.io/release-revision: "REPLACE_WITH_RELEASE_IDENTITY"
+        node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+        node-operator.io/vault-client: "true"
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-service-account-token-volume-name: vault-auth
+        vault.hashicorp.com/tls-secret: vault-agent-ca
+        vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
+        vault.hashicorp.com/tls-server-name: vault.vault.svc
+        vault.hashicorp.com/role: hoodi-REPLACE_WITH_VALIDATOR_SET-slashing-db
+        vault.hashicorp.com/agent-inject-secret-postgres-password: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/slashing-db-password
+        vault.hashicorp.com/agent-inject-template-postgres-password: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/slashing-db-password" -}}
+          {{ .Data.data.password }}
+          {{- end }}
+    spec:
+      serviceAccountName: validator-slashing-db
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      volumes:
+        - name: vault-auth
+          projected:
+            sources:
+              - serviceAccountToken: {audience: vault, expirationSeconds: 600, path: token}
+        - name: migrations
+          emptyDir: {}
+        - name: postgres-run
+          emptyDir: {}
+        - name: postgres-tmp
+          emptyDir: {}
+      initContainers:
+        - name: stage-web3signer-postgres-migrations
+          image: REPLACE_WITH_WEB3SIGNER_IMAGE
+          command: ["/bin/sh", "-ec"]
+          args: ["cp -r /opt/web3signer/migrations/postgresql/. /migrations/"]
+          volumeMounts: [{name: migrations, mountPath: /migrations}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}, runAsNonRoot: true, runAsUser: 999, runAsGroup: 999}
+      containers:
+        - name: postgres
+          image: REPLACE_WITH_POSTGRES_IMAGE
+          env:
+            - {name: POSTGRES_USER, value: web3signer}
+            - {name: POSTGRES_DB, value: web3signer}
+            - {name: POSTGRES_PASSWORD_FILE, value: /vault/secrets/postgres-password}
+            # EBS volumes contain lost+found at their root. Keep PostgreSQL
+            # state in a dedicated child directory so first initialization is
+            # deterministic and does not depend on volume filesystem details.
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{name: postgres, containerPort: 5432}]
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: migrations, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+            - {name: postgres-run, mountPath: /var/run/postgresql}
+            - {name: postgres-tmp, mountPath: /tmp}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 4Gi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}, runAsNonRoot: true, runAsUser: 999, runAsGroup: 999}
+  volumeClaimTemplates:
+    - metadata: {name: data, labels: {node-operator.io/encryption-policy: baseline-ebs-kms}}
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: validator-hoodi-gp3-kms
+        resources: {requests: {storage: 50Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-remote-signer-direct
+  namespace: validator-operations
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/component: validator-remote-signer
+    node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+  ports: [{name: signer-api, port: 9000, targetPort: signer-api}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-remote-signer
+  namespace: validator-operations
+spec:
+  # Start exactly one signer through start-hoodi-validator-signer.sh after
+  # custody, TLS, database and exclusive-signing checks. Never start from GitOps.
+  replicas: 0
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: validator-remote-signer
+      node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: validator-remote-signer
+        node-operator.io/deployment-name: REPLACE_WITH_DEPLOYMENT_IDENTITY
+        node-operator.io/release-revision: "REPLACE_WITH_RELEASE_IDENTITY"
+        node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET
+        node-operator.io/vault-client: "true"
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-service-account-token-volume-name: vault-auth
+        vault.hashicorp.com/tls-secret: vault-agent-ca
+        vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
+        vault.hashicorp.com/tls-server-name: vault.vault.svc
+        vault.hashicorp.com/role: hoodi-REPLACE_WITH_VALIDATOR_SET-runtime
+        vault.hashicorp.com/agent-inject-secret-keystore.json: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/keystore
+        vault.hashicorp.com/agent-inject-template-keystore.json: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/keystore" -}}{{ .Data.data.keystore }}{{- end }}
+        vault.hashicorp.com/agent-inject-secret-keystore.txt: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/password
+        vault.hashicorp.com/agent-inject-template-keystore.txt: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/password" -}}{{ .Data.data.password }}{{- end }}
+        vault.hashicorp.com/agent-inject-secret-slashing-db.properties: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/slashing-db-password
+        vault.hashicorp.com/agent-inject-template-slashing-db.properties: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/slashing-db-password" -}}password={{ .Data.data.password }}{{- end }}
+        vault.hashicorp.com/agent-inject-secret-tls.p12: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/signer-tls
+        vault.hashicorp.com/agent-inject-template-tls.p12: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/signer-tls" -}}{{ .Data.data.pkcs12_b64 | base64Decode }}{{- end }}
+        vault.hashicorp.com/agent-inject-secret-tls-password.txt: node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/signer-tls
+        vault.hashicorp.com/agent-inject-template-tls-password.txt: |
+          {{- with secret "node-operator-runtime/data/validators/hoodi/REPLACE_WITH_VALIDATOR_SET/runtime/signer-tls" -}}{{ .Data.data.password }}{{- end }}
+    spec:
+      serviceAccountName: validator-remote-signer
+      automountServiceAccountToken: false
+      securityContext: {fsGroup: 999, seccompProfile: {type: RuntimeDefault}}
+      volumes:
+        - name: vault-auth
+          projected:
+            sources:
+              - serviceAccountToken: {audience: vault, expirationSeconds: 600, path: token}
+        - {name: signer-data, emptyDir: {}}
+        - {name: signer-tmp, emptyDir: {}}
+        - name: known-clients
+          configMap:
+            name: validator-REPLACE_WITH_VALIDATOR_SET-known-clients
+            defaultMode: 0444
+            items: [{key: known-clients, path: known-clients.txt}]
+      containers:
+        - name: web3signer
+          image: REPLACE_WITH_WEB3SIGNER_IMAGE
+          args:
+            - --http-listen-host=0.0.0.0
+            - --http-listen-port=9000
+            # Emit Web3Signer HTTP access metadata only.  Request bodies,
+            # credentials, and BLS signatures stay out of stdout evidence.
+            - --access-logs-enabled
+            - --http-host-allowlist=validator-REPLACE_WITH_VALIDATOR_SET-remote-signer.validator-operations.svc,localhost,127.0.0.1
+            - --tls-keystore-file=/vault/secrets/tls.p12
+            - --tls-keystore-password-file=/vault/secrets/tls-password.txt
+            # The file contains only the reviewed Prysm client certificate
+            # fingerprint. It is provisioned separately from Vault-held server
+            # TLS and BLS material. Never replace this with allow-any-client.
+            - --tls-known-clients-file=/etc/web3signer-known-clients/known-clients.txt
+            - --data-path=/data
+            - eth2
+            - --network=hoodi
+            - --keystores-path=/vault/secrets
+            - --keystores-passwords-path=/vault/secrets
+            - --slashing-protection-enabled=true
+            - --slashing-protection-db-url=jdbc:postgresql://validator-REPLACE_WITH_VALIDATOR_SET-slashing-db.validator-operations.svc:5432/web3signer
+            - --slashing-protection-db-username=web3signer
+            - --slashing-protection-db-pool-configuration-file=/vault/secrets/slashing-db.properties
+            # Web3Signer 26.x creates a separate pruning pool. It must use
+            # the same Vault-rendered password file; never inline a password.
+            - --slashing-protection-pruning-db-pool-configuration-file=/vault/secrets/slashing-db.properties
+          ports: [{name: signer-api, containerPort: 9000}]
+          volumeMounts:
+            - {name: vault-auth, mountPath: /var/run/secrets/vault.hashicorp.com/serviceaccount, readOnly: true}
+            - {name: signer-data, mountPath: /data}
+            - {name: signer-tmp, mountPath: /tmp}
+            - {name: known-clients, mountPath: /etc/web3signer-known-clients, readOnly: true}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 999, runAsGroup: 999}
+          readinessProbe: {tcpSocket: {port: signer-api}, periodSeconds: 10}
+---
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-primary
+  namespace: validator-operations
+  labels: {node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}
+spec: {holderIdentity: "", leaseDurationSeconds: 60}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-signer-dependencies
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-remote-signer, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/component: validator-slashing-db, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}}]
+      ports: [{protocol: TCP, port: 5432}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: vault}}, podSelector: {matchLabels: {app.kubernetes.io/name: vault}}}]
+      ports: [{protocol: TCP, port: 8200}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-db-dependencies
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-slashing-db, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: vault}}, podSelector: {matchLabels: {app.kubernetes.io/name: vault}}}]
+      ports: [{protocol: TCP, port: 8200}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-signer-ingress
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-remote-signer, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/component: validator-signing-fence, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}}]
+      ports: [{protocol: TCP, port: 9000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: validator-REPLACE_WITH_VALIDATOR_SET-db-ingress
+  namespace: validator-operations
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/component: validator-slashing-db, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/component: validator-remote-signer, node-operator.io/validator-set: REPLACE_WITH_VALIDATOR_SET}}}]
+      ports: [{protocol: TCP, port: 5432}]

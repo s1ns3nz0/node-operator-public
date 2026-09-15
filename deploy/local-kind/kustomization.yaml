@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# This is a render-only, local-development composition. It intentionally keeps
+# the T-3/T-4/T-5 pod templates intact so Kubernetes admission can evaluate the
+# production-shaped specifications, while preventing Kind from starting either
+# blockchain client.
+resources:
+  - resources/base/namespace.yaml
+  - resources/base/service-account.yaml
+  - resources/base/rbac.yaml
+  - resources/base/network-policies.yaml
+  - resources/prysm/service-account.yaml
+  - resources/prysm/storage-class.yaml
+  - resources/prysm/service.yaml
+  - resources/prysm/statefulset.yaml
+  - resources/prysm/network-policies.yaml
+  - resources/nethermind/service-account.yaml
+  - resources/nethermind/storage-class.yaml
+  - resources/nethermind/service.yaml
+  - resources/nethermind/statefulset.yaml
+  - resources/nethermind/network-policies.yaml
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: prysm-beacon
+      namespace: node-operator
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: nethermind-execution
+      namespace: node-operator
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 0

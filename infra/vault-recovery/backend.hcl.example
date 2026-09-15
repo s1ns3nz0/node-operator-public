@@ -1,0 +1,9 @@
+# Copy outside the repository and replace every placeholder. This backend is
+# dedicated to recovery infrastructure; never reuse a live workload state key.
+# Credentials and profiles do not belong in this file.
+bucket         = "node-operator-tfstate-123456789012-apnortheast2"
+key            = "node-operator/vault-recovery/terraform.tfstate"
+region         = "ap-northeast-2"
+dynamodb_table = "node-operator-terraform-lock"
+encrypt        = true
+kms_key_id     = "arn:aws:kms:ap-northeast-2:123456789012:key/REPLACE_WITH_DEDICATED_STATE_KEY"

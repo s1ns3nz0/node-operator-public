@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!Dockerfile.dockerignore
+!agent-main.go
+!test-mock-vault.go
+!upstream.lock.json

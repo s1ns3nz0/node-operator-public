@@ -1,0 +1,176 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nethermind-execution
+  namespace: node-operator
+  labels:
+    app.kubernetes.io/name: nethermind
+    app.kubernetes.io/component: execution-client
+    app.kubernetes.io/part-of: hoodi-node
+    app.kubernetes.io/version: 1.39.3-chiseled
+    node-operator.io/network: hoodi
+spec:
+  serviceName: nethermind-execution
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: OnDelete
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nethermind
+      app.kubernetes.io/component: execution-client
+      app.kubernetes.io/part-of: hoodi-node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nethermind
+        app.kubernetes.io/component: execution-client
+        app.kubernetes.io/part-of: hoodi-node
+        app.kubernetes.io/version: 1.39.3-chiseled
+        node-operator.io/network: hoodi
+        node-operator.io/vault-client: "true"
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-vault@sha256:268bb80aa9c6d13d65fcfa05c0c268caca068952240a8087291a6ce0b66e3a10
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-service-account-token-volume-name: vault-auth
+        vault.hashicorp.com/tls-secret: vault-agent-ca
+        vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
+        vault.hashicorp.com/tls-server-name: vault.vault.svc
+        vault.hashicorp.com/role: hoodi-engine-nethermind
+        vault.hashicorp.com/agent-inject-secret-engine.jwt: node-operator-runtime/data/nodes/hoodi/engine-api-jwt
+        vault.hashicorp.com/agent-inject-template-engine.jwt: |
+          {{- with secret "node-operator-runtime/data/nodes/hoodi/engine-api-jwt" -}}{{ .Data.data.jwt }}{{- end }}
+    spec:
+      serviceAccountName: nethermind-execution
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 600
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        node-operator.io/network: hoodi
+        node-operator.io/role: execution
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values:
+                      - ap-northeast-2a
+                      - ap-northeast-2c
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: prysm-beacon
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: nethermind
+          image: 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/node-operator-baseline-gitops-nodes@sha256:ec5f6c8158dbf82d4ddbd5500f895c930f52aa3b4c998148d9e1b452793d828e
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=hoodi
+            - --datadir=/data
+            - --Network.P2PPort=30303
+            - --Network.DiscoveryPort=30303
+            - --JsonRpc.Enabled=false
+            - --JsonRpc.EngineHost=0.0.0.0
+            - --JsonRpc.EnginePort=8551
+            - --JsonRpc.JwtSecretFile=/vault/secrets/engine.jwt
+            - --Metrics.Enabled=true
+            - --Metrics.ExposeHost=0.0.0.0
+            - --Metrics.ExposePort=6060
+          env:
+            - name: TMPDIR
+              value: /tmp
+          ports:
+            - name: engine-api
+              containerPort: 8551
+              protocol: TCP
+            - name: p2p-tcp
+              containerPort: 30303
+              protocol: TCP
+            - name: p2p-udp
+              containerPort: 30303
+              protocol: UDP
+            - name: metrics
+              containerPort: 6060
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: p2p-tcp
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 90
+          readinessProbe:
+            tcpSocket:
+              port: p2p-tcp
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            tcpSocket:
+              port: p2p-tcp
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+            limits:
+              cpu: "16"
+              memory: 48Gi
+          volumeMounts:
+            - name: vault-auth
+              mountPath: /var/run/secrets/vault.hashicorp.com/serviceaccount
+              readOnly: true
+            - name: nethermind-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: vault-auth
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: vault
+                  expirationSeconds: 600
+                  path: token
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: nethermind-data
+        labels:
+          app.kubernetes.io/name: nethermind
+          app.kubernetes.io/component: execution-client
+          app.kubernetes.io/part-of: hoodi-node
+          node-operator.io/encryption-policy: baseline-ebs-kms
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: nethermind-hoodi-gp3-kms
+        resources:
+          requests:
+            storage: 2Ti

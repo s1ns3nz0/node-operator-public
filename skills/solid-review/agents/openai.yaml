@@ -1,0 +1,6 @@
+interface:
+  display_name: "SOLID review"
+  short_description: "Review object-oriented design boundaries"
+  default_prompt: "Use $solid-review on this task's object-oriented design before implementation."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,11 @@
+# Non-secret inputs for a fresh, zero-resource environment. Leave
+# existing_ssm_endpoint_security_group_id as null to create dedicated endpoints.
+vpc_id                    = "vpc-0123456789abcdef0"
+subnet_id                 = "subnet-0123456789abcdef0"
+cluster_security_group_id = "sg-0123456789abcdef0"
+
+existing_ssm_endpoint_security_group_id = null
+manage_cluster_ingress_rule              = true
+
+# Compatibility field: leave null. The installer never adopts a maintainer host.
+retained_host_instance_id = null

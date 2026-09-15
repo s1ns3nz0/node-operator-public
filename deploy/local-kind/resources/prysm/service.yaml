@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: prysm-beacon
+  namespace: node-operator
+  labels:
+    app.kubernetes.io/name: prysm-beacon
+    app.kubernetes.io/part-of: hoodi-node
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: prysm-beacon
+    app.kubernetes.io/part-of: hoodi-node
+  ports:
+    - name: p2p-tcp
+      port: 13000
+      protocol: TCP
+      targetPort: p2p-tcp
+    - name: p2p-udp
+      port: 13000
+      protocol: UDP
+      targetPort: p2p-udp
