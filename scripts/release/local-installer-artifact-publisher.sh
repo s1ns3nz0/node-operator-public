@@ -26,6 +26,10 @@ ensure_cosign() {
 }
 ensure_cosign
 source="$bundle/source"; registry="$account.dkr.ecr.$region.amazonaws.com"; key_prefix="$work/local-artifact-authority"
+# Authenticate the Docker daemon to this exact deployment registry before the
+# first build tag is pushed. AWS CLI credentials do not automatically create a
+# Docker registry session.
+aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null
 private_key="$key_prefix.key"; public_key="$key_prefix.pub"; signature="$work/local-artifact-authority.sigstore.json"
 for path in "$private_key" "$public_key" "$signature"; do [ ! -e "$path" ] && [ ! -L "$path" ] || { printf '%s\n' 'refusing to overwrite local authority signing material' >&2; exit 65; }; done
 cosign generate-key-pair --output-key-prefix "$key_prefix" >/dev/null

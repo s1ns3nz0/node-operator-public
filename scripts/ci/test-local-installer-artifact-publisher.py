@@ -18,7 +18,7 @@ class LocalPublisher(unittest.TestCase):
             (bundle / "bundle-manifest.json").write_text("{}")
             bin_dir = root / "bin"; bin_dir.mkdir(); log = root / "log"
             (bin_dir / "docker").write_text("#!/bin/sh\nprintf 'docker:%s\\n' \"$1\" >> \"$LOG\"\nexit 0\n")
-            (bin_dir / "aws").write_text("#!/bin/sh\nprintf 'aws:%s\\n' \"$1\" >> \"$LOG\"\ncase \"$*\" in *vault-bootstrap*) x=b;; *gitops-oci-mirror*) x=c;; *vault-audit-relay*) x=d;; *) exit 64;; esac\nprintf 'sha256:%064d\\n' 0 | tr '0' \"$x\"\n")
+            (bin_dir / "aws").write_text("#!/bin/sh\nprintf 'aws:%s\\n' \"$1\" >> \"$LOG\"\ncase \"$*\" in *get-login-password*) printf token; exit 0;; *vault-bootstrap*) x=b;; *gitops-oci-mirror*) x=c;; *vault-audit-relay*) x=d;; *) exit 64;; esac\nprintf 'sha256:%064d\\n' 0 | tr '0' \"$x\"\n")
             (bin_dir / "cosign").write_text("#!/bin/sh\nprintf 'cosign:%s\\n' \"$1\" >> \"$LOG\"\nif [ \"$1\" = generate-key-pair ]; then while [ \"$#\" -gt 0 ]; do [ \"$1\" = --output-key-prefix ] && p=$2; shift; done; : > \"$p.key\"; : > \"$p.pub\"; elif [ \"$1\" = sign-blob ]; then while [ \"$#\" -gt 0 ]; do [ \"$1\" = --bundle ] && b=$2; shift; done; : > \"$b\"; fi\n")
             for path in bin_dir.iterdir(): path.chmod(0o755)
             output = work / "local-artifact-authority.json"
@@ -30,6 +30,8 @@ class LocalPublisher(unittest.TestCase):
             self.assertEqual({item["component"] for item in authority["artifacts"]}, set(DIGESTS))
             self.assertEqual(next(item for item in authority["artifacts"] if item["component"] == "gitops-oci-mirror")["destination"], None)
             self.assertIn("cosign:sign-blob", log.read_text())
+            self.assertIn("aws:ecr", log.read_text())
+            self.assertIn("docker:login", log.read_text())
             self.assertNotIn("aws:sts", log.read_text())
 
 if __name__ == "__main__": unittest.main()
