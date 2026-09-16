@@ -14,7 +14,17 @@ case "$bundle:$work:$output" in /*:/*:/*) ;; *) printf '%s\n' 'publisher paths m
 [ -d "$work" ] && [ ! -L "$work" ] && [ "$(dirname "$output")" = "$work" ] && [ ! -e "$output" ] && [ ! -L "$output" ] || { printf '%s\n' 'authority output is unsafe' >&2; exit 65; }
 command -v docker >/dev/null 2>&1 || { printf '%s\n' 'docker is required to build first-party artifacts' >&2; exit 69; }
 command -v aws >/dev/null 2>&1 || { printf '%s\n' 'aws is required to publish first-party artifacts' >&2; exit 69; }
-command -v cosign >/dev/null 2>&1 || { printf '%s\n' 'cosign is required to sign local authority' >&2; exit 69; }
+ensure_cosign() {
+  command -v cosign >/dev/null 2>&1 && return 0
+  # The public macOS path uses Homebrew's signed formula distribution. Do not
+  # download an unchecked executable or alter PATH outside this process.
+  if [ "$(uname -s)" = Darwin ] && command -v brew >/dev/null 2>&1; then
+    printf '%s\n' 'Installing required Cosign through Homebrew…' >&2
+    brew install cosign >&2
+  fi
+  command -v cosign >/dev/null 2>&1 || { printf '%s\n' 'Cosign could not be installed automatically; install cosign and rerun the installer' >&2; exit 69; }
+}
+ensure_cosign
 source="$bundle/source"; registry="$account.dkr.ecr.$region.amazonaws.com"; key_prefix="$work/local-artifact-authority"
 private_key="$key_prefix.key"; public_key="$key_prefix.pub"; signature="$work/local-artifact-authority.sigstore.json"
 for path in "$private_key" "$public_key" "$signature"; do [ ! -e "$path" ] && [ ! -L "$path" ] || { printf '%s\n' 'refusing to overwrite local authority signing material' >&2; exit 65; }; done
