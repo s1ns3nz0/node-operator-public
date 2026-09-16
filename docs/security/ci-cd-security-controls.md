@@ -4,6 +4,8 @@
 **Scope:** GitHub Actions workflows and their referenced CI/release scripts in this repository.  
 **Assurance boundary:** this document describes controls present in source. It is not evidence that GitHub branch protection, environment approvals, AWS IAM, ECR, S3 Object Lock, or a workflow run is currently configured or effective.
 
+For control-by-control implementation detail and representative workflow/script excerpts, see [CI/CD security control implementation details](ci-cd-security-control-implementation.md).
+
 ## Control objectives
 
 The pipeline is designed to:
