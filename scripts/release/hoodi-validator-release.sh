@@ -238,7 +238,7 @@ case "$command_name" in
     # every copier and before zero-resource Terraform can run.
     artifact_inventory="$work_dir/installer-artifact-inventory.json"
     [ ! -e "$artifact_inventory" ] && [ ! -L "$artifact_inventory" ] || { printf '%s\n' 'installer artifact inventory checkpoint is unsafe' >&2; exit 65; }
-    "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe --local-artifact-authority "$local_artifact_authority" > "$artifact_inventory" || { cat "$artifact_inventory" >&2; printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
+    "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe --local-artifact-authority "$local_artifact_authority" > "$artifact_inventory" 2>&1 || { cat "$artifact_inventory" >&2; printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
     chmod 600 "$artifact_inventory"
     adapter=("$release_dir/mirror-installer-vault-artifacts.py")
     mirror_args=(--bundle-root "$bundle_root" --state-dir "$work_dir" --work-dir "$work_dir" --inputs-dir "$(dirname "$zero_inputs")" --account "$account" --region "$input_region" --deployment-name "$deployment_name" --profile "$profile" --release-sha "$revision")
