@@ -199,6 +199,35 @@ class ArtifactInventoryTests(unittest.TestCase):
         self.assertEqual(calls[0][0:2], ["cosign", "verify-blob"])
         self.assertFalse(any(command[0] == "aws" for command in calls))
 
+    def test_signed_local_authority_resolves_all_indexless_bundle_gaps(self):
+        (self.bundle / "rendered/installer-artifact-index.json").unlink()
+        baseline = inventory.build_inventory(self.bundle, SHA, "123456789012", "ap-northeast-2", "node-operator", require_signer_probe=True)
+        digest = "sha256:" + "f" * 64
+        rows = []
+        for entry in baseline["artifacts"]:
+            if entry.get("unresolved_authority") is None:
+                continue
+            destination = entry["destination"]
+            if destination is not None:
+                destination = destination.rsplit("@", 1)[0] + "@" + digest
+            rows.append({"component": entry["component"], "source": "local.example/" + entry["component"] + "@" + digest,
+                         "destination": destination, "authority": "local-build-sign-publish"})
+        authority = self.bundle / "local-artifact-authority.json"
+        authority.write_text(json.dumps({"schema_version": 1, "release_revision": SHA,
+            "deployment": {"aws_account_id": "123456789012", "aws_region": "ap-northeast-2", "deployment_name": "node-operator"},
+            "artifacts": rows}))
+        authority.with_suffix(".pub").write_text("public")
+        authority.with_suffix(".sigstore.json").write_text("signature")
+        original = inventory.subprocess.run
+        inventory.subprocess.run = lambda *args, **kwargs: None
+        try:
+            result = inventory.build_inventory(self.bundle, SHA, "123456789012", "ap-northeast-2", "node-operator",
+                                               require_signer_probe=True, local_artifact_authority=authority)
+        finally:
+            inventory.subprocess.run = original
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["unresolved_authority"], [])
+
     def test_missing_gitops_catalog_is_structured_incomplete_not_a_schema_error(self):
         (self.source / ".ci/gitops/approved-oci-artifacts.json").unlink()
         result = self.invoke()

@@ -388,8 +388,13 @@ def build_inventory(bundle_root: Path, release_sha: str, account: str, region: s
         if index is not None:
             raise InventoryError("local artifact authority is accepted only when the selected bundle has no installer artifact index")
         local = _local_artifact_authority(local_artifact_authority, release_sha, account, region, deployment_name)
-        if set(local) - VAULT_COMPONENTS:
-            raise InventoryError("local artifact authority contains a non-Vault component")
+        # An index-less public bundle cannot cite historic publication records.
+        # Its bundled publisher may instead resolve every currently-unresolved
+        # component from reviewed source inputs, but it may never replace an
+        # already signed release authority entry.
+        unresolved_components = {item["component"] for item in entries if item.get("unresolved_authority")}
+        if set(local) - unresolved_components:
+            raise InventoryError("local artifact authority contains a component that is not unresolved")
         for item in entries:
             replacement = local.get(item["component"])
             if replacement is None:

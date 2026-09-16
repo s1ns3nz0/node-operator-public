@@ -32,6 +32,7 @@ bash scripts/ci/test-release-infrastructure-resume.sh
 bash scripts/ci/test-zero-resource-release-contract.sh
 python3 scripts/ci/test-bootstrap-local-state.py
 python3 scripts/ci/test-bootstrap-local-installer-artifacts.py
+python3 scripts/ci/test-local-installer-artifact-publisher.py
 python3 scripts/ci/test-local-artifact-bootstrap.py
 python3 scripts/ci/test-backend-role-retry.py
 bash scripts/ci/test-zero-prepare-artifacts.sh
