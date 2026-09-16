@@ -236,7 +236,10 @@ case "$command_name" in
     # A local authority can fill only signed-bundle gaps and must retain the
     # original deployment destination. The inventory remains the gate before
     # every copier and before zero-resource Terraform can run.
-    "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe --local-artifact-authority "$local_artifact_authority" >/dev/null || { printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
+    artifact_inventory="$work_dir/installer-artifact-inventory.json"
+    [ ! -e "$artifact_inventory" ] && [ ! -L "$artifact_inventory" ] || { printf '%s\n' 'installer artifact inventory checkpoint is unsafe' >&2; exit 65; }
+    "${selected_env[@]}" python3 "$release_dir/installer_artifact_inventory.py" --bundle-root "$bundle_root" --release-sha "$revision" --aws-account-id "$account" --aws-region "$input_region" --deployment-name "$deployment_name" --require-signer-probe --local-artifact-authority "$local_artifact_authority" > "$artifact_inventory" || { cat "$artifact_inventory" >&2; printf '%s\n' 'required installer artifact authority is unresolved' >&2; exit 65; }
+    chmod 600 "$artifact_inventory"
     adapter=("$release_dir/mirror-installer-vault-artifacts.py")
     mirror_args=(--bundle-root "$bundle_root" --state-dir "$work_dir" --work-dir "$work_dir" --inputs-dir "$(dirname "$zero_inputs")" --account "$account" --region "$input_region" --deployment-name "$deployment_name" --profile "$profile" --release-sha "$revision")
     if [ -e "$work_dir/vault-artifact-mirror-receipt.json" ] || [ -e "$work_dir/vault-artifact-manifest.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-binding.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-verified.json" ] || [ -e "$work_dir/vault-pre-eks-artifact-mirror-uncertain.json" ] || [ -L "$work_dir/vault-artifact-mirror-receipt.json" ] || [ -L "$work_dir/vault-artifact-manifest.json" ] || [ -L "$work_dir/vault-pre-eks-artifact-mirror-uncertain.json" ]; then vault_operation=resume; else vault_operation=mirror; fi
