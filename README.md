@@ -1,5 +1,10 @@
 # node-operator
 
+[![CI](https://github.com/s1ns3nz0/node-operator-public/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/s1ns3nz0/node-operator-public/actions/workflows/continuous-integration.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![GitHub last commit](https://img.shields.io/github/last-commit/s1ns3nz0/node-operator-public)](https://github.com/s1ns3nz0/node-operator-public/commits/main)
+[![GitHub issues](https://img.shields.io/github/issues/s1ns3nz0/node-operator-public)](https://github.com/s1ns3nz0/node-operator-public/issues)
+
 Hoodi validator operator for isolated AWS/EKS deployments. It provisions the
 non-secret platform first, keeps validator custody and activation as separate
 guarded ceremonies, and deploys only digest-pinned artifacts.
