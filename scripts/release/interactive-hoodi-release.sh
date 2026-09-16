@@ -65,7 +65,7 @@ artifact_authority_gate() {
     [ -f "$local_artifact_authority" ] && [ ! -L "$local_artifact_authority" ] || { printf '%s\n' 'local artifact authority is unavailable or unsafe; no resources changed' >&2; return 65; }
     authority_args+=(--local-artifact-authority "$local_artifact_authority")
   fi
-  inventory="$(python3 "$artifact_inventory" "${authority_args[@]}")" || { printf '%s\n' 'required installer artifact authority is unresolved; no resources changed' >&2; return 65; }
+  inventory="$(python3 "$artifact_inventory" "${authority_args[@]}" 2>&1)" || { printf '%s\n' "$inventory" >&2; printf '%s\n' 'required installer artifact authority is unresolved; no resources changed' >&2; return 65; }
   printf '%s\n' "$inventory"
 }
 
