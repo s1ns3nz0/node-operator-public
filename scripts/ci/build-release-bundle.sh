@@ -122,7 +122,7 @@ path_is_in_release_boundary() {
       ;;
     # Package only the reviewed non-secret observability inputs, not local
     # telemetry, evidence, credentials, or arbitrary files in this directory.
-    deploy/observability/kustomization.yaml|deploy/observability/namespace.yaml|deploy/observability/service-accounts.yaml|deploy/observability/rbac.yaml|deploy/observability/network-policies.yaml|deploy/observability/fluent-bit-config.yaml|deploy/observability/fluent-bit-daemonset.template.yaml|deploy/observability/evidence-envelope.schema.json)
+    deploy/observability/kustomization.yaml|deploy/observability/namespace.yaml|deploy/observability/service-accounts.yaml|deploy/observability/rbac.yaml|deploy/observability/network-policies.yaml|deploy/observability/fluent-bit-config.yaml|deploy/observability/fluent-bit-daemonset.template.yaml|deploy/observability/evidence-envelope.schema.json|docs/gitops/vault-values.example.yaml|docs/gitops/vault-gp3-encrypted-storageclass.yaml|.ci/toolchains/vault-bootstrap.Dockerfile|.ci/toolchains/gitops-oci-mirror.Dockerfile|.ci/vault-audit-relay/Dockerfile)
       return 0
       ;;
     deploy/kyverno/kustomization.yaml|deploy/kyverno/policies/*.yaml)

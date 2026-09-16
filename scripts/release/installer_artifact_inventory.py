@@ -148,6 +148,21 @@ def _entry(component: str, consumer: str, destination: str | None, source: str |
 def _local_artifact_authority(path: Path, release_sha: str, account: str, region: str,
                               deployment_name: str) -> dict[str, dict[str, Any]]:
     """Read a fresh local publisher's immutable authority outside the bundle."""
+    signature = path.with_suffix(".sigstore.json")
+    public_key = path.with_suffix(".pub")
+    for sidecar in (signature, public_key):
+        try:
+            info = sidecar.lstat()
+            if sidecar.is_symlink() or not stat.S_ISREG(info.st_mode):
+                raise InventoryError("local artifact authority signature material is unsafe")
+        except OSError as error:
+            raise InventoryError("local artifact authority signature material is unavailable") from error
+    try:
+        subprocess.run(["cosign", "verify-blob", "--insecure-ignore-tlog", "--key", str(public_key),
+                        "--bundle", str(signature), str(path)], check=True, capture_output=True, text=True,
+                       timeout=AWS_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+        raise InventoryError("local artifact authority signature is invalid") from error
     value = _exact(_json(path), {"schema_version", "release_revision", "deployment", "artifacts"}, "local artifact authority")
     expected_deployment = {"aws_account_id": account, "aws_region": region, "deployment_name": deployment_name}
     if value["schema_version"] != 1 or value["release_revision"] != release_sha or value["deployment"] != expected_deployment or not isinstance(value["artifacts"], list):
@@ -157,9 +172,16 @@ def _local_artifact_authority(path: Path, release_sha: str, account: str, region
         item = _exact(item, {"component", "source", "destination", "authority"}, "local artifact authority entry")
         component = _text(item["component"], "local artifact component", re.compile(r"^[a-z0-9][a-z0-9-]*$"))
         source = _text(item["source"], "local artifact source", IMAGE)
-        destination = _text(item["destination"], "local artifact destination")
-        _, digest = _destination_parts(destination, account, region)
-        if source.rsplit("@", 1)[1] != digest or item["authority"] != "local-build-sign-publish" or component in result:
+        destination = item["destination"]
+        if component == "gitops-oci-mirror":
+            if destination is not None:
+                raise InventoryError("local mirror tool authority must not declare a destination")
+        else:
+            destination = _text(destination, "local artifact destination")
+            _, digest = _destination_parts(destination, account, region)
+            if source.rsplit("@", 1)[1] != digest:
+                raise InventoryError("local artifact authority source and destination differ")
+        if item["authority"] != "local-build-sign-publish" or component in result:
             raise InventoryError("local artifact authority entry is invalid")
         result[component] = {"source": source, "destination": destination, "authority": item["authority"]}
     return result
@@ -350,7 +372,12 @@ def build_inventory(bundle_root: Path, release_sha: str, account: str, region: s
     vault_destinations = {"vault-bootstrap": f"{deployment_name}-baseline-gitops-vault", "vault-audit-relay": f"{deployment_name}-baseline-vault-audit-relay", "gitops-oci-mirror": None, "vault-server": f"{deployment_name}-baseline-gitops-vault", "vault-injector": f"{deployment_name}-baseline-gitops-vault", "cert-manager-controller": f"{deployment_name}-baseline-gitops-cert-manager", "cert-manager-webhook": f"{deployment_name}-baseline-gitops-cert-manager", "cert-manager-cainjector": f"{deployment_name}-baseline-gitops-cert-manager", "cert-manager-startupapicheck": f"{deployment_name}-baseline-gitops-cert-manager", "vault-chart": f"{deployment_name}-baseline-gitops-vault/vault", "cert-manager-chart": f"{deployment_name}-baseline-gitops-cert-manager/cert-manager"}
     for component in sorted(VAULT_COMPONENTS):
         if index is None:
-            entries.append(_entry(component, "Vault installer", None, None, None, True, "selected release has no installer artifact index; historical Vault catalog entries are not a fallback"))
+            # Index-less public bundles have no publication records.  Retain
+            # the fixed private repository shape so a locally signed authority
+            # can resolve it, but never invent a digest or public source.
+            repository = vault_destinations[component]
+            destination = f"{_registry(account, region)}/{repository}@<local-digest>" if repository else None
+            entries.append(_entry(component, "Vault installer", destination, None, None, True, "selected release has no installer artifact index; historical Vault catalog entries are not a fallback"))
             continue
         item = index[component]
         repository = vault_destinations[component]
@@ -358,17 +385,21 @@ def build_inventory(bundle_root: Path, release_sha: str, account: str, region: s
         entries.append(_entry(component, "Vault installer", destination, item["source"], "installer-artifact-index", True))
 
     if local_artifact_authority is not None:
+        if index is not None:
+            raise InventoryError("local artifact authority is accepted only when the selected bundle has no installer artifact index")
         local = _local_artifact_authority(local_artifact_authority, release_sha, account, region, deployment_name)
+        if set(local) - VAULT_COMPONENTS:
+            raise InventoryError("local artifact authority contains a non-Vault component")
         for item in entries:
             replacement = local.get(item["component"])
             if replacement is None:
                 continue
-            # A local publication can resolve only a source that the signed
-            # bundle itself leaves unresolved. It cannot replace existing
-            # signed authority or move an approved destination repository.
             expected_destination = item.get("destination")
-            same_repository = (isinstance(expected_destination, str) and "@" in expected_destination
-                               and expected_destination.rsplit("@", 1)[0] == replacement["destination"].rsplit("@", 1)[0])
+            actual_destination = replacement["destination"]
+            same_repository = ((expected_destination is None and actual_destination is None)
+                               or (isinstance(expected_destination, str) and "@" in expected_destination
+                                   and isinstance(actual_destination, str) and "@" in actual_destination
+                                   and expected_destination.rsplit("@", 1)[0] == actual_destination.rsplit("@", 1)[0]))
             if not item.get("unresolved_authority") or not same_repository:
                 raise InventoryError("local artifact authority attempts to replace signed release authority")
             item.update(replacement)

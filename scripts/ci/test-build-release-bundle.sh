@@ -213,6 +213,8 @@ for required_path in \
   source/scripts/release/prepare-zero-resource-inputs.sh \
   source/scripts/release/prepare-hoodi-zero-release-inputs.sh \
   source/scripts/release/hoodi-validator-release.sh \
+  source/scripts/release/bootstrap-local-installer-artifacts.sh \
+  source/scripts/release/local-installer-artifact-publisher.sh \
   source/scripts/release/apply-vault-bootstrap.sh \
   source/scripts/release/run-platform-bootstrap.sh \
   source/scripts/release/node-operator-install.sh \

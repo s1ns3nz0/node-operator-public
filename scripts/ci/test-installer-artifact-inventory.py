@@ -131,11 +131,10 @@ class ArtifactInventoryTests(unittest.TestCase):
             "artifacts": [{"component": "prysm-validator", "source": "local.example/prysm@" + digest,
                            "destination": prysm["destination"].rsplit("@", 1)[0] + "@" + digest,
                            "authority": "local-build-sign-publish"}]}))
+        # A release index is already signed authority. Local output is never a
+        # replacement path when it exists, even for an otherwise unresolved item.
         result = self.invoke(None, "--require-signer-probe", "--local-artifact-authority", str(authority))
-        self.assertEqual(result.returncode, 1, result.stderr)
-        item = next(row for row in json.loads(result.stdout)["artifacts"] if row["component"] == "prysm-validator")
-        self.assertEqual(item["source"], "local.example/prysm@" + digest)
-        self.assertEqual(item["authority"], "local-build-sign-publish")
+        self.assertEqual(result.returncode, 2, result.stderr)
         authority.write_text(json.dumps({"schema_version": 1, "release_revision": SHA,
             "deployment": {"aws_account_id": "123456789012", "aws_region": "ap-northeast-2", "deployment_name": "node-operator"},
             "artifacts": [{"component": "argo-cd", "source": "local.example/argo@" + digest,
@@ -171,6 +170,34 @@ class ArtifactInventoryTests(unittest.TestCase):
         self.assertIsNone(vault["source"])
         self.assertIn("historical Vault catalog", vault["unresolved_authority"])
         self.assertIn("vault-bootstrap", {entry["component"] for entry in value["unresolved_authority"]})
+
+    def test_signed_local_vault_authority_is_accepted_only_without_bundle_index(self):
+        (self.bundle / "rendered/installer-artifact-index.json").unlink()
+        baseline = inventory.build_inventory(self.bundle, SHA, "123456789012", "ap-northeast-2", "node-operator")
+        digest = "sha256:" + "f" * 64
+        rows = []
+        for entry in baseline["artifacts"]:
+            if entry["component"] not in inventory.VAULT_COMPONENTS:
+                continue
+            destination = entry["destination"]
+            if destination is not None:
+                destination = destination.replace("<local-digest>", digest)
+            rows.append({"component": entry["component"], "source": "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/local/" + entry["component"] + "@" + digest, "destination": destination, "authority": "local-build-sign-publish"})
+        authority = self.bundle / "local-artifact-authority.json"
+        authority.write_text(json.dumps({"schema_version": 1, "release_revision": SHA, "deployment": {"aws_account_id": "123456789012", "aws_region": "ap-northeast-2", "deployment_name": "node-operator"}, "artifacts": rows}))
+        authority.with_suffix(".pub").write_text("public")
+        authority.with_suffix(".sigstore.json").write_text("signature")
+        original = inventory.subprocess.run
+        calls = []
+        inventory.subprocess.run = lambda command, **kwargs: calls.append(command)
+        try:
+            result = inventory.build_inventory(self.bundle, SHA, "123456789012", "ap-northeast-2", "node-operator", local_artifact_authority=authority)
+        finally:
+            inventory.subprocess.run = original
+        resolved = {item["component"] for item in result["artifacts"] if item.get("authority") == "local-build-sign-publish"}
+        self.assertEqual(resolved, set(inventory.VAULT_COMPONENTS))
+        self.assertEqual(calls[0][0:2], ["cosign", "verify-blob"])
+        self.assertFalse(any(command[0] == "aws" for command in calls))
 
     def test_missing_gitops_catalog_is_structured_incomplete_not_a_schema_error(self):
         (self.source / ".ci/gitops/approved-oci-artifacts.json").unlink()

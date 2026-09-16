@@ -28,9 +28,10 @@ authority="$work/local-artifact-authority.json"
 "$publisher" --bundle-root "$bundle" --work-dir "$work" --account "$account" --region "$region" --deployment-name "$deployment" --release-sha "$revision" --output "$authority"
 [ -f "$authority" ] && [ ! -L "$authority" ] || { printf '%s\n' 'local publisher did not create its authority projection' >&2; exit 65; }
 signature="$work/local-artifact-authority.sigstore.json"
-public_key="${NODE_OPERATOR_LOCAL_ARTIFACT_AUTHORITY_PUBLIC_KEY:-}"
-case "$public_key" in /*) ;; *) printf '%s\n' 'set NODE_OPERATOR_LOCAL_ARTIFACT_AUTHORITY_PUBLIC_KEY to the local authority signing public key' >&2; exit 69 ;; esac
-[ -f "$public_key" ] && [ ! -L "$public_key" ] && [ -f "$signature" ] && [ ! -L "$signature" ] || { printf '%s\n' 'local publisher must retain a regular authority signature and public key' >&2; exit 65; }
+# The publisher generates a one-time private key inside the 0700 work directory.
+# No caller-selected executable or verification key can replace bundle authority.
+public_key="$work/local-artifact-authority.pub"
+[ -f "$public_key" ] && [ ! -L "$public_key" ] && [ -f "$signature" ] && [ ! -L "$signature" ] || { printf '%s\n' 'local publisher must retain regular authority signature material' >&2; exit 65; }
 command -v cosign >/dev/null 2>&1 || { printf '%s\n' 'cosign is required to verify local artifact authority' >&2; exit 69; }
-cosign verify-blob --key "$public_key" --bundle "$signature" "$authority" >/dev/null
+cosign verify-blob --insecure-ignore-tlog --key "$public_key" --bundle "$signature" "$authority" >/dev/null
 printf 'PASS local artifact build/sign/publish authority is available at %s.\n' "$authority"
