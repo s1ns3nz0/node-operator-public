@@ -5,32 +5,57 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/s1ns3nz0/node-operator-public)](https://github.com/s1ns3nz0/node-operator-public/commits/main)
 [![GitHub issues](https://img.shields.io/github/issues/s1ns3nz0/node-operator-public)](https://github.com/s1ns3nz0/node-operator-public/issues)
 
-보안 설계를 우선한 AWS EKS 환경에서 **Prysm(consensus) + Nethermind(execution)** 기반 **Hoodi 테스트넷 Validator**를 운영하는 실습 프로젝트입니다.
+A security-first hands-on exercise: running a **Prysm (consensus) + Nethermind (execution)** **Hoodi testnet Ethereum validator** on **AWS EKS**.
 
 ![Validator attesting on Hoodi](docs/assets/validator-attestation.png)
 
-## 목적
+## Purpose
 
-- AWS EKS 위에 Hoodi Validator를 안전하게 구축·운영하는 방법을 실습
-- 키 커스터디(Vault), 서명 방어(Fence), 아티팩트 무결성(Cosign/SBOM) 등 **보안 설계를 최우선**으로 반영
-- 검증 가능한 CI/CD 파이프라인을 통해 신뢰할 수 있는 배포 절차를 제공
+- Practice deploying and operating a Hoodi validator on AWS EKS the safe way.
+- Treat key custody (Vault), signing protection (Fence), and artifact integrity (Cosign/SBOM) as first-class design constraints, not an afterthought.
+- Ship a verifiable CI/CD pipeline so the deployment process itself can be trusted, not just the running system.
 
-## 설치
+## Install
 
 ```bash
 bash scripts/release/node-operator-install.sh
 ```
 
-인자 없이 실행하는 단일 진입점입니다. AWS CLI 프로필/리전을 자동으로 감지하고, 로컬 릴리스 번들을 검증한 뒤 배포에 필요한 값만 대화형으로 입력받습니다.
+A single, no-argument entrypoint. It detects your AWS CLI profile/Region, verifies a local release bundle, and only then asks for the minimal interactive input needed for deployment.
 
-사전 준비물: AWS CLI 프로필, Docker, `git`/`jq`/`terraform`/`kubectl`/`python3`/`gh`. macOS는 Cosign이 없으면 Homebrew로 자동 설치합니다.
+Prerequisites: an AWS CLI profile, Docker, and `git`/`jq`/`terraform`/`kubectl`/`python3`/`gh`. On macOS, Cosign is installed automatically via Homebrew if missing.
 
-자세한 운영 경계와 정리(teardown) 절차는 [`docs/operations/release-bootstrap.md`](docs/operations/release-bootstrap.md)를 참고하세요.
+See [`docs/operations/release-bootstrap.md`](docs/operations/release-bootstrap.md) for the full operational boundaries and teardown procedure.
 
-## 보안
+## Key management with Vault
 
-- CI/CD 통제 목록: [`docs/security/ci-cd-security-controls.md`](docs/security/ci-cd-security-controls.md)
-- 통제별 구현 상세: [`docs/security/ci-cd-security-control-implementation.md`](docs/security/ci-cd-security-control-implementation.md)
-- 위협 모델: [`THREAT-MODEL.md`](THREAT-MODEL.md)
+Validator signing keys, TLS material, and JWTs never live in plain Kubernetes Secrets or on the validator client's filesystem. HashiCorp Vault is the single source of truth for all of it:
 
-라이선스는 [Apache-2.0](LICENSE)입니다.
+- **Validator keystores** are onboarded once through a guarded custody ceremony and stored under a validator-set-scoped KV path. Read/write policies are split by role: an onboarding role can only `create`/`update` the keystore, password, and TLS material — it can never read them back; a runtime signer role can only `read` its own set's data, with no `list` permission, so it cannot enumerate other validator sets.
+- **mTLS certificates** for the fence↔signer transport are minted and rotated by Vault. The signer's TLS bundle (`signer-tls`) and the fence's client certificate (`client-tls`) are separate Vault paths, injected into their respective Pods at runtime. A `known-clients` allowlist pins which client certificate fingerprints the signer will accept, so possession of *a* valid client cert alone is not enough.
+- **The Engine API JWT** shared between Nethermind and Prysm is generated and stored in Vault, not baked into a manifest or environment variable, and is retrieved just-in-time by the client Pods.
+- **The slashing-protection database password** follows the same pattern: written once during onboarding, read-only at runtime, and never exposed to the validator client itself (the client has no Vault access at all — only the signer and fence do).
+- Every Vault policy explicitly denies `transit/*`, `auth/*`, and `sys/*` for these narrow roles, so a compromised workload identity cannot escalate into Vault administration or use Transit to sign or decrypt unrelated data.
+- Vault itself is bootstrapped from a pinned, digest-verified Helm release; unseal/recovery material and generated root tokens are handled through short, explicit ceremonies rather than left resident in the cluster.
+
+In short: **no validator private key, TLS private key, or JWT is ever stored outside Vault**, and each component (onboarding tool, signer, fence, slashing DB) gets the narrowest possible Vault capability for the one secret it actually needs.
+
+## Security
+
+- CI/CD controls: [`docs/security/ci-cd-security-controls.md`](docs/security/ci-cd-security-controls.md)
+- Per-control implementation detail: [`docs/security/ci-cd-security-control-implementation.md`](docs/security/ci-cd-security-control-implementation.md)
+- Threat model: [`THREAT-MODEL.md`](THREAT-MODEL.md)
+
+## Related write-ups
+
+Design rationale and lessons learned from building this project are written up separately:
+
+- [CI/CD Security Controls and Implementation in the Pipeline Design](https://miata.cloud/posts/ci-cd-security-controls-implemented-in-the-pipeline-design/)
+- [AWS Infrastructure Overview](https://miata.cloud/posts/hoodi-node-validator-aws-architecture-overview/)
+- [Kubernetes Namespace Design for a Hoodi Validator](https://miata.cloud/posts/kubernetes-namespace-design-for-a-hoodi-validator/)
+- [Private EKS Security Design Review](https://miata.cloud/posts/securing-a-hoodi-ethereum-testnet-validator-on-aws-eks/)
+- [Vault Secret Management for Hoodi Validator](https://miata.cloud/posts/vault-secret-management-for-hoodi-validator/)
+- [Cert-manager and Vault: Roles, Scope, and Collaboration](https://miata.cloud/posts/cert-manager-and-vault-roles-scope-and-collaboration/)
+- [Prioritizing Security Controls: Hoodi Validator Lessons](https://miata.cloud/posts/prioritizing-security-controls-hoodi-validator-lessons/)
+
+License: [Apache-2.0](LICENSE).
